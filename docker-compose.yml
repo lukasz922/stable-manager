@@ -1,0 +1,31 @@
+services:
+  db:
+    image: postgres:16
+    container_name: stable_manager_db
+    restart: always
+    environment:
+      POSTGRES_DB: stable_manager
+      POSTGRES_USER: stable_user
+      POSTGRES_PASSWORD: stable_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - stable_pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    container_name: stable_manager_backend
+    restart: always
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql+psycopg://stable_user:stable_password@db:5432/stable_manager
+      SECRET_KEY: change_me_super_secret
+      ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+
+volumes:
+  stable_pgdata:
