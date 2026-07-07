@@ -51,3 +51,29 @@ export async function createHorse(data: HorseCreate): Promise<Horse> {
 
   return response.json();
 }
+
+export async function deleteHorse(id: number): Promise<void> {
+  const response = await fetch(`${API}/horses/${id}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error("Nie udało się usunąć konia.");
+  }
+}
+
+export async function updateHorse(id: number, data: HorseCreate): Promise<Horse> {
+  const response = await fetch(`${API}/horses/${id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    throw new Error("Nie udało się zaktualizować konia.");
+  }
+
+  return response.json();
+}

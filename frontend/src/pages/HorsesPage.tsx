@@ -20,13 +20,15 @@ import {
 } from "@mui/material";
 
 import type { Horse } from "../api/horses";
-import { createHorse, getHorses } from "../api/horses";
+import { createHorse, deleteHorse, getHorses, updateHorse } from "../api/horses";
 
 export function HorsesPage() {
   const [horses, setHorses] = useState<Horse[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
+  const [editingHorseId, setEditingHorseId] = useState<number | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState({
     name: "",
     breed: "",
@@ -52,44 +54,87 @@ export function HorsesPage() {
     }
   }
 
-  async function handleCreateHorse() {
-
-if (!form.name.trim()) {
-  setError("Imię konia jest wymagane.");
-  return;
-}
-
-setError("");   
-
- await createHorse({
-      name: form.name,
-      breed: form.breed || undefined,
-      gender: form.gender || undefined,
-      color: form.color || undefined,
-      height_cm: form.height_cm ? Number(form.height_cm) : undefined,
-      max_rider_weight: form.max_rider_weight ? Number(form.max_rider_weight) : undefined,
-      max_lessons_per_day: Number(form.max_lessons_per_day),
-      status: form.status,
-      notes: form.notes || undefined,
-    });
-
-    setOpen(false);
-    setForm({
-      name: "",
-      breed: "",
-      gender: "",
-      color: "",
-      height_cm: "",
-      max_rider_weight: "",
-      max_lessons_per_day: "5",
-      status: "available",
-      notes: "",
-    });
-
-    await loadHorses();
+async function handleCreateHorse() {
+  if (!form.name.trim()) {
+    setError("Imię konia jest wymagane.");
+    return;
   }
 
-  if (loading) {
+  setError("");
+
+const payload = {
+  name: form.name,
+  breed: form.breed || undefined,
+  gender: form.gender || undefined,
+  color: form.color || undefined,
+  height_cm: form.height_cm ? Number(form.height_cm) : undefined,
+  max_rider_weight: form.max_rider_weight
+    ? Number(form.max_rider_weight)
+    : undefined,
+  max_lessons_per_day: Number(form.max_lessons_per_day),
+  status: form.status,
+  notes: form.notes || undefined,
+};
+
+if (isEditing && editingHorseId !== null) {
+  await updateHorse(editingHorseId, payload);
+} else {
+  await createHorse(payload);
+}
+
+  setOpen(false);
+setIsEditing(false);
+setEditingHorseId(null);
+  setForm({
+    name: "",
+    breed: "",
+    gender: "",
+    color: "",
+    height_cm: "",
+    max_rider_weight: "",
+    max_lessons_per_day: "5",
+    status: "available",
+    notes: "",
+  });
+
+  await loadHorses();
+}
+
+async function handleDeleteHorse(horse: Horse) {
+  const confirmed = window.confirm(
+    `Czy na pewno chcesz usunąć konia "${horse.name}"?`
+  );
+
+  if (!confirmed) return;
+
+  await deleteHorse(horse.id);
+  await loadHorses();
+}
+  
+function handleEditHorse(horse: Horse) {
+  setEditingHorseId(horse.id);
+  setIsEditing(true);
+
+  setForm({
+    name: horse.name || "",
+    breed: horse.breed || "",
+    gender: horse.gender || "",
+    color: horse.color || "",
+    height_cm: horse.height_cm ? String(horse.height_cm) : "",
+    max_rider_weight: horse.max_rider_weight
+      ? String(horse.max_rider_weight)
+      : "",
+    max_lessons_per_day: String(horse.max_lessons_per_day || 5),
+    status: horse.status || "available",
+    notes: horse.notes || "",
+  });
+
+  setError("");
+  setOpen(true);
+}
+
+
+if (loading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", mt: 5 }}>
         <CircularProgress />
@@ -136,8 +181,10 @@ setError("");
                 <Typography>Rasa: {horse.breed || "-"}</Typography>
                 <Typography>Płeć: {horse.gender || "-"}</Typography>
                 <Typography>Maść: {horse.color || "-"}</Typography>
-                <Typography>Limit jazd: {horse.max_lessons_per_day}</Typography><Chip
+                <Typography>Limit jazd: {horse.max_lessons_per_day}</Typography>
+<Chip
   sx={{ mt: 2 }}
+
   color={
     horse.status === "available"
       ? "success"
@@ -153,7 +200,28 @@ setError("");
       : "🔴 Niedostępny"
   }
 />
-              </CardContent>
+   
+<Box sx={{ mt: 2 }}>
+  <Button
+    variant="outlined"
+    size="small"
+    onClick={() => handleEditHorse(horse)}
+    sx={{ mr: 1 }}
+  >
+    Edytuj
+  </Button>
+
+ <Button
+    color="error"
+    variant="outlined"
+    size="small"
+    onClick={() => handleDeleteHorse(horse)}
+  >
+    Usuń
+  </Button>
+</Box>
+           
+</CardContent>
             </Card>
           ))}
         </Box>
