@@ -1,11 +1,11 @@
+import { useState } from "react";
+import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 import {
   AppBar,
   Box,
-  Card,
-  CardContent,
+  Button,
   Divider,
   Drawer,
-  Grid,
   List,
   ListItemButton,
   ListItemIcon,
@@ -21,72 +21,77 @@ import SchoolIcon from "@mui/icons-material/School";
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
 import PaymentsIcon from "@mui/icons-material/Payments";
 import BarChartIcon from "@mui/icons-material/BarChart";
+import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
+
+import { LoginPage } from "./pages/LoginPage";
+import { ClientsPage } from "./pages/ClientsPage";
+import { DashboardPage } from "./pages/DashboardPage";
+import { HorsesPage } from "./pages/HorsesPage";
+import { ScannerPage } from "./pages/ScannerPage";
 
 const drawerWidth = 260;
 
 const menu = [
-  { label: "Dashboard", icon: <DashboardIcon /> },
-  { label: "Kalendarz", icon: <CalendarMonthIcon /> },
-  { label: "Klienci", icon: <PeopleIcon /> },
-  { label: "Konie", icon: <PetsIcon /> },
-  { label: "Instruktorzy", icon: <SchoolIcon /> },
-  { label: "Karnety", icon: <ConfirmationNumberIcon /> },
-  { label: "Płatności", icon: <PaymentsIcon /> },
-  { label: "Raporty", icon: <BarChartIcon /> },
+  { label: "Dashboard", path: "/dashboard", icon: <DashboardIcon /> },
+  { label: "Kalendarz", path: "/calendar", icon: <CalendarMonthIcon /> },
+  { label: "Klienci", path: "/clients", icon: <PeopleIcon /> },
+  { label: "Konie", path: "/horses", icon: <PetsIcon /> },
+  { label: "Instruktorzy", path: "/instructors", icon: <SchoolIcon /> },
+  { label: "Karnety", path: "/passes", icon: <ConfirmationNumberIcon /> },
+  { label: "Skaner", path: "/scanner", icon: <QrCodeScannerIcon /> },
+  { label: "Płatności", path: "/payments", icon: <PaymentsIcon /> },
+  { label: "Raporty", path: "/reports", icon: <BarChartIcon /> },
 ];
 
-const stats = [
-  { label: "Dzisiejsze jazdy", value: "12" },
-  { label: "Aktywni klienci", value: "43" },
-  { label: "Konie", value: "18" },
-  { label: "Dzisiejszy obrót", value: "1780 zł" },
-];
+function PlaceholderPage({ title }: { title: string }) {
+  return (
+    <>
+      <Typography variant="h4" fontWeight={800}>
+        {title}
+      </Typography>
+      <Typography color="text.secondary">Ten moduł dodamy w kolejnym sprincie.</Typography>
+    </>
+  );
+}
 
 function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(
+    Boolean(localStorage.getItem("stable_token"))
+  );
+
+  function logout() {
+    localStorage.removeItem("stable_token");
+    setIsLoggedIn(false);
+  }
+
+  if (!isLoggedIn) {
+    return <LoginPage onLogin={() => setIsLoggedIn(true)} />;
+  }
+
   return (
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
-      <AppBar
-        position="fixed"
-        elevation={0}
-        sx={{
-          zIndex: (theme) => theme.zIndex.drawer + 1,
-          background: "#ffffff",
-          color: "#1f2937",
-          borderBottom: "1px solid #e5e7eb",
-        }}
-      >
+      <AppBar position="fixed" elevation={0} sx={{ zIndex: 1300, background: "#fff", color: "#1f2937", borderBottom: "1px solid #e5e7eb" }}>
         <Toolbar>
           <Typography variant="h6" fontWeight={800} sx={{ flexGrow: 1 }}>
             🐴 StableManager
           </Typography>
-          <Typography variant="body2">Administrator</Typography>
+          <Typography variant="body2" sx={{ mr: 2 }}>Administrator</Typography>
+          <Button variant="outlined" size="small" onClick={logout}>Wyloguj</Button>
         </Toolbar>
       </AppBar>
 
-      <Drawer
-        variant="permanent"
-        sx={{
-          width: drawerWidth,
-          flexShrink: 0,
-          [`& .MuiDrawer-paper`]: {
-            width: drawerWidth,
-            boxSizing: "border-box",
-            borderRight: "1px solid #e5e7eb",
-          },
-        }}
-      >
+      <Drawer variant="permanent" sx={{ width: drawerWidth, flexShrink: 0, [`& .MuiDrawer-paper`]: { width: drawerWidth, boxSizing: "border-box" } }}>
         <Toolbar />
         <Box sx={{ p: 2 }}>
-          <Typography variant="caption" color="text.secondary">
-            PANEL STAJNI
-          </Typography>
+          <Typography variant="caption" color="text.secondary">PANEL STAJNI</Typography>
         </Box>
         <Divider />
         <List sx={{ px: 1 }}>
-          {menu.map((item, index) => (
+          {menu.map((item) => (
             <ListItemButton
-              key={item.label}
-              selected={index === 0}
+              key={item.path}
+              component={NavLink}
+              to={item.path}
               sx={{ borderRadius: 2, mb: 0.5 }}
             >
               <ListItemIcon>{item.icon}</ListItemIcon>
@@ -98,42 +103,18 @@ function App() {
 
       <Box component="main" sx={{ flexGrow: 1, p: 4 }}>
         <Toolbar />
-
-        <Typography variant="h4" fontWeight={800} gutterBottom>
-          Dashboard
-        </Typography>
-
-        <Typography color="text.secondary" sx={{ mb: 3 }}>
-          Podsumowanie pracy stajni na dziś.
-        </Typography>
-
-        <Grid container spacing={3}>
-          {stats.map((stat) => (
-            <Grid item xs={12} sm={6} md={3} key={stat.label}>
-              <Card elevation={0} sx={{ border: "1px solid #e5e7eb" }}>
-                <CardContent>
-                  <Typography color="text.secondary" variant="body2">
-                    {stat.label}
-                  </Typography>
-                  <Typography variant="h4" fontWeight={800} sx={{ mt: 1 }}>
-                    {stat.value}
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-
-        <Card elevation={0} sx={{ mt: 3, border: "1px solid #e5e7eb" }}>
-          <CardContent>
-            <Typography variant="h6" fontWeight={700}>
-              Najbliższa jazda
-            </Typography>
-            <Typography sx={{ mt: 2 }}>
-              18:00 — Anna Kowalska / Koń: Aramis / Instruktor: Adam
-            </Typography>
-          </CardContent>
-        </Card>
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/clients" element={<ClientsPage />} />
+          <Route path="/horses" element={<HorsesPage />} />
+          <Route path="/scanner" element={<ScannerPage />} />
+          <Route path="/calendar" element={<PlaceholderPage title="Kalendarz" />} />
+          <Route path="/instructors" element={<PlaceholderPage title="Instruktorzy" />} />
+          <Route path="/passes" element={<PlaceholderPage title="Karnety" />} />
+          <Route path="/payments" element={<PlaceholderPage title="Płatności" />} />
+          <Route path="/reports" element={<PlaceholderPage title="Raporty" />} />
+        </Routes>
       </Box>
     </Box>
   );
