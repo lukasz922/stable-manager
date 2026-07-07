@@ -28,6 +28,7 @@ import { ClientsPage } from "./pages/ClientsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { HorsesPage } from "./pages/HorsesPage";
 import { ScannerPage } from "./pages/ScannerPage";
+import { InstructorsPage } from "./pages/InstructorsPage";
 
 const drawerWidth = 260;
 
@@ -110,7 +111,7 @@ function App() {
           <Route path="/horses" element={<HorsesPage />} />
           <Route path="/scanner" element={<ScannerPage />} />
           <Route path="/calendar" element={<PlaceholderPage title="Kalendarz" />} />
-          <Route path="/instructors" element={<PlaceholderPage title="Instruktorzy" />} />
+   	  <Route path="/instructors" element={<InstructorsPage />} />
           <Route path="/passes" element={<PlaceholderPage title="Karnety" />} />
           <Route path="/payments" element={<PlaceholderPage title="Płatności" />} />
           <Route path="/reports" element={<PlaceholderPage title="Raporty" />} />
