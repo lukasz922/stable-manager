@@ -17,6 +17,7 @@ import {
   DialogTitle,
   TextField,
   Typography,
+  Snackbar,
 } from "@mui/material";
 
 import type { Horse } from "../api/horses";
@@ -27,8 +28,12 @@ export function HorsesPage() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
+
+
   const [editingHorseId, setEditingHorseId] = useState<number | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [search, setSearch] = useState("");
+  const [successMessage, setSuccessMessage] = useState(""); 
   const [form, setForm] = useState({
     name: "",
     breed: "",
@@ -97,7 +102,11 @@ setEditingHorseId(null);
     notes: "",
   });
 
-  await loadHorses();
+ await loadHorses();
+
+setSuccessMessage(
+  isEditing ? "Koń został zaktualizowany." : "Koń został dodany."
+);
 }
 
 async function handleDeleteHorse(horse: Horse) {
@@ -109,8 +118,9 @@ async function handleDeleteHorse(horse: Horse) {
 
   await deleteHorse(horse.id);
   await loadHorses();
-}
-  
+
+  setSuccessMessage("Koń został usunięty.");
+}  
 function handleEditHorse(horse: Horse) {
   setEditingHorseId(horse.id);
   setIsEditing(true);
@@ -133,6 +143,15 @@ function handleEditHorse(horse: Horse) {
   setOpen(true);
 }
 
+const filteredHorses = horses.filter((horse) => {
+  const phrase = search.toLowerCase();
+
+  return (
+    horse.name.toLowerCase().includes(phrase) ||
+    (horse.code || "").toLowerCase().includes(phrase) ||
+    (horse.breed || "").toLowerCase().includes(phrase)
+  );
+});
 
 if (loading) {
     return (
@@ -159,6 +178,15 @@ if (loading) {
         </Button>
       </Box>
 
+<TextField
+  label="🔍 Szukaj konia"
+  placeholder="Wpisz imię, kod lub rasę..."
+  fullWidth
+  sx={{ mb: 3 }}
+  value={search}
+  onChange={(e) => setSearch(e.target.value)}
+/>
+
       {horses.length === 0 ? (
         <Typography>Brak koni w bazie.</Typography>
       ) : (
@@ -169,7 +197,7 @@ if (loading) {
             gap: 2,
           }}
         >
-          {horses.map((horse) => (
+         {filteredHorses.map((horse) => (
             <Card key={horse.id} elevation={0} sx={{ border: "1px solid #e5e7eb" }}>
               <CardContent>
                 <Typography variant="overline">{horse.code}</Typography>
@@ -336,6 +364,12 @@ if (loading) {
 </DialogActions>
         </DialogContent>
       </Dialog>
-    </Box>
+   <Snackbar
+  open={Boolean(successMessage)}
+  autoHideDuration={3000}
+  onClose={() => setSuccessMessage("")}
+  message={successMessage}
+/>
+ </Box>
   );
 }
