@@ -9,6 +9,8 @@ from app.db.session import engine
 from app.models.user import User
 from app.models.client import Client
 from app.models.horse import Horse
+from app.models.instructor import Instructor
+from app.api.instructors import router as instructors_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -28,6 +30,9 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(clients_router)
 app.include_router(horses_router)
+app.include_router(instructors_router)
+
+
 
 
 @app.get("/")
