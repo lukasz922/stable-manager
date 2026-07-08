@@ -52,3 +52,32 @@ export async function createInstructor(
 
   return response.json();
 }
+
+export async function updateInstructor(
+  id: number,
+  data: InstructorCreate
+): Promise<Instructor> {
+  const response = await fetch(`${API}/instructors/${id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    throw new Error("Nie udało się zaktualizować instruktora.");
+  }
+
+  return response.json();
+}
+
+export async function deleteInstructor(id: number): Promise<void> {
+  const response = await fetch(`${API}/instructors/${id}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error("Nie udało się usunąć instruktora.");
+  }
+}

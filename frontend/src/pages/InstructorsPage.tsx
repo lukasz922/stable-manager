@@ -21,7 +21,13 @@ import {
 } from "@mui/material";
 
 import type { Instructor } from "../api/instructors";
-import { createInstructor, getInstructors } from "../api/instructors";
+import {
+  createInstructor,
+  deleteInstructor,
+  getInstructors,
+  updateInstructor,
+} from "../api/instructors";
+
 
 export function InstructorsPage() {
   const [instructors, setInstructors] = useState<Instructor[]>([]);
@@ -29,6 +35,9 @@ export function InstructorsPage() {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+const [editingInstructorId, setEditingInstructorId] = useState<number | null>(null);
+const [isEditing, setIsEditing] = useState(false);
+
   const [search, setSearch] = useState("");
 
   const [form, setForm] = useState({
@@ -61,21 +70,29 @@ export function InstructorsPage() {
       return;
     }
 
+
     setError("");
 
-    await createInstructor({
-      first_name: form.first_name,
-      last_name: form.last_name,
-      phone: form.phone || undefined,
-      email: form.email || undefined,
-      specialization: form.specialization || undefined,
-      hourly_rate: form.hourly_rate ? Number(form.hourly_rate) : undefined,
-      status: form.status,
-      notes: form.notes || undefined,
-    });
+    const payload = {
+  first_name: form.first_name,
+  last_name: form.last_name,
+  phone: form.phone || undefined,
+  email: form.email || undefined,
+  specialization: form.specialization || undefined,
+  hourly_rate: form.hourly_rate ? Number(form.hourly_rate) : undefined,
+  status: form.status,
+  notes: form.notes || undefined,
+};
+
+if (isEditing && editingInstructorId !== null) {
+  await updateInstructor(editingInstructorId, payload);
+} else {
+  await createInstructor(payload);
+}
 
     setOpen(false);
-
+setIsEditing(false);
+setEditingInstructorId(null);
     setForm({
       first_name: "",
       last_name: "",
@@ -88,7 +105,9 @@ export function InstructorsPage() {
     });
 
     await loadInstructors();
-    setSuccessMessage("Instruktor został dodany.");
+   setSuccessMessage(
+  isEditing ? "Instruktor został zaktualizowany." : "Instruktor został dodany."
+);
   }
 
   const filteredInstructors = instructors.filter((instructor) => {
@@ -101,6 +120,38 @@ export function InstructorsPage() {
       (instructor.specialization || "").toLowerCase().includes(phrase)
     );
   });
+
+function handleEditInstructor(instructor: Instructor) {
+  setEditingInstructorId(instructor.id);
+  setIsEditing(true);
+
+  setForm({
+    first_name: instructor.first_name || "",
+    last_name: instructor.last_name || "",
+    phone: instructor.phone || "",
+    email: instructor.email || "",
+    specialization: instructor.specialization || "",
+    hourly_rate: instructor.hourly_rate ? String(instructor.hourly_rate) : "",
+    status: instructor.status || "active",
+    notes: instructor.notes || "",
+  });
+
+  setError("");
+  setOpen(true);
+}
+
+async function handleDeleteInstructor(instructor: Instructor) {
+  const confirmed = window.confirm(
+    `Czy na pewno chcesz usunąć instruktora "${instructor.first_name} ${instructor.last_name}"?`
+  );
+
+  if (!confirmed) return;
+
+  await deleteInstructor(instructor.id);
+  await loadInstructors();
+
+  setSuccessMessage("Instruktor został usunięty.");
+}
 
   if (loading) {
     return (
@@ -177,6 +228,26 @@ export function InstructorsPage() {
                   color={instructor.status === "active" ? "success" : "warning"}
                   label={instructor.status === "active" ? "Aktywny" : "Nieaktywny"}
                 />
+
+<Box sx={{ mt: 2 }}>
+  <Button
+    variant="outlined"
+    size="small"
+    onClick={() => handleEditInstructor(instructor)}
+    sx={{ mr: 1 }}
+  >
+    Edytuj
+  </Button>
+
+  <Button
+    color="error"
+    variant="outlined"
+    size="small"
+    onClick={() => handleDeleteInstructor(instructor)}
+  >
+    Usuń
+  </Button>
+</Box>
               </CardContent>
             </Card>
           ))}
