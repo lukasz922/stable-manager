@@ -1,15 +1,35 @@
+import { useEffect, useState } from "react";
+import {
+  Alert,
+  Box,
+  CircularProgress,
+  Snackbar,
+  Typography,
+} from "@mui/material";
+
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import { useEffect, useState } from "react";
-import { Box, CircularProgress, Typography } from "@mui/material";
 
-import { getRides, type Ride } from "../api/rides";
+import { RideDialog } from "../components/calendar/RideDialog";
+import { getRides, updateRide, type Ride } from "../api/rides";
+
+function toLocalDateTime(date: Date): string {
+  const offset = date.getTimezoneOffset();
+  const localDate = new Date(date.getTime() - offset * 60_000);
+
+  return localDate.toISOString().slice(0, 19);
+}
 
 export function CalendarPage() {
   const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedRideId, setSelectedRideId] = useState<number | null>(null);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     loadRides();
@@ -19,6 +39,9 @@ export function CalendarPage() {
     try {
       const data = await getRides();
       setRides(data);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("Nie udało się pobrać jazd.");
     } finally {
       setLoading(false);
     }
@@ -26,11 +49,13 @@ export function CalendarPage() {
 
   const events = rides.map((ride) => ({
     id: String(ride.id),
-    title: `🐴 ${ride.horse_name || "Koń"}\n👤 ${ride.client_name || "Klient"}\n👨‍🏫 ${ride.instructor_name || "Instruktor"}`,
+    title: `🐴 ${ride.horse_name || "Koń"}\n👤 ${
+      ride.client_name || "Klient"
+    }\n👨‍🏫 ${ride.instructor_name || "Instruktor"}`,
     start: ride.start_time,
     end: new Date(
-      new Date(ride.start_time).getTime() + ride.duration_minutes * 60000
-    ).toISOString(),
+      new Date(ride.start_time).getTime() + ride.duration_minutes * 60_000
+    ),
     backgroundColor:
       ride.status === "completed"
         ? "#2e7d32"
@@ -81,7 +106,8 @@ export function CalendarPage() {
           allDaySlot={false}
           nowIndicator={true}
           selectable={true}
-          editable={false}
+          editable={true}
+          eventDurationEditable={false}
           slotMinTime="08:00:00"
           slotMaxTime="21:00:00"
           slotDuration="00:30:00"
@@ -98,13 +124,108 @@ export function CalendarPage() {
             day: "Dzień",
           }}
           eventClick={(info) => {
-            alert(`Jazda ID: ${info.event.id}`);
+            setSelectedRideId(Number(info.event.id));
+            setSelectedDate(info.event.startStr);
+            setDialogOpen(true);
           }}
           dateClick={(info) => {
-            alert(`Dodamy jazdę na: ${info.dateStr}`);
+            setSelectedRideId(null);
+            setSelectedDate(info.dateStr);
+            setDialogOpen(true);
+          }}
+          eventDrop={async (info) => {
+            const rideId = Number(info.event.id);
+            const ride = rides.find((item) => item.id === rideId);
+
+            if (!ride || !info.event.start) {
+              info.revert();
+              return;
+            }
+
+            const confirmed = window.confirm(
+              `Czy przenieść jazdę na ${info.event.start.toLocaleString(
+                "pl-PL"
+              )}?`
+            );
+
+            if (!confirmed) {
+              info.revert();
+              return;
+            }
+
+            try {
+              await updateRide(rideId, {
+                client_id: ride.client_id,
+                horse_id: ride.horse_id,
+                instructor_id: ride.instructor_id,
+                start_time: toLocalDateTime(info.event.start),
+                duration_minutes: ride.duration_minutes,
+                ride_type: ride.ride_type,
+                status: ride.status,
+                notes: ride.notes || undefined,
+              });
+
+              await loadRides();
+              setSuccessMessage("Termin jazdy został zmieniony.");
+            } catch (error) {
+              console.error(error);
+              info.revert();
+
+              setErrorMessage(
+                error instanceof Error
+                  ? error.message
+                  : "Nie udało się zmienić terminu jazdy."
+              );
+            }
           }}
         />
       </Box>
+
+      <RideDialog
+        open={dialogOpen}
+        selectedDate={selectedDate}
+        rideId={selectedRideId}
+        onClose={() => setDialogOpen(false)}
+        onSaved={(action) => {
+          loadRides();
+
+          if (action === "created") {
+            setSuccessMessage("Jazda została dodana.");
+          } else if (action === "updated") {
+            setSuccessMessage("Jazda została zaktualizowana.");
+          } else {
+            setSuccessMessage("Jazda została usunięta.");
+          }
+        }}
+      />
+
+      <Snackbar
+        open={Boolean(successMessage)}
+        autoHideDuration={3000}
+        onClose={() => setSuccessMessage("")}
+      >
+        <Alert
+          severity="success"
+          variant="filled"
+          onClose={() => setSuccessMessage("")}
+        >
+          {successMessage}
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={Boolean(errorMessage)}
+        autoHideDuration={5000}
+        onClose={() => setErrorMessage("")}
+      >
+        <Alert
+          severity="error"
+          variant="filled"
+          onClose={() => setErrorMessage("")}
+        >
+          {errorMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
