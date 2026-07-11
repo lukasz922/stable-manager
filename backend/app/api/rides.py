@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.db.session import get_db
 from app.models.ride import Ride
 from app.schemas.ride import RideCreate, RideRead
+from app.services.pass_service import apply_pass_status_change
 
 router = APIRouter(prefix="/rides", tags=["Rides"])
 
@@ -36,7 +37,10 @@ def ride_to_read(ride: Ride) -> RideRead:
     )
 
 
-def get_ride_with_relations(db: Session, ride_id: int) -> Ride | None:
+def get_ride_with_relations(
+    db: Session,
+    ride_id: int,
+) -> Ride | None:
     return (
         db.query(Ride)
         .options(
@@ -54,8 +58,13 @@ def check_ride_conflicts(
     payload: RideCreate,
     excluded_ride_id: int | None = None,
 ) -> None:
+    if payload.status == "cancelled":
+        return
+
     new_start = payload.start_time
-    new_end = new_start + timedelta(minutes=payload.duration_minutes)
+    new_end = new_start + timedelta(
+        minutes=payload.duration_minutes
+    )
 
     query = (
         db.query(Ride)
@@ -75,15 +84,16 @@ def check_ride_conflicts(
     if excluded_ride_id is not None:
         query = query.filter(Ride.id != excluded_ride_id)
 
-    possible_conflicts = query.all()
-
-    for existing_ride in possible_conflicts:
+    for existing_ride in query.all():
         existing_start = existing_ride.start_time
         existing_end = existing_start + timedelta(
             minutes=existing_ride.duration_minutes
         )
 
-        overlaps = new_start < existing_end and new_end > existing_start
+        overlaps = (
+            new_start < existing_end
+            and new_end > existing_start
+        )
 
         if not overlaps:
             continue
@@ -98,8 +108,8 @@ def check_ride_conflicts(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    f'Koń „{horse_name}” ma już zaplanowaną jazdę '
-                    "w tym czasie."
+                    f'Koń „{horse_name}” ma już zaplanowaną '
+                    "jazdę w tym czasie."
                 ),
             )
 
@@ -114,8 +124,8 @@ def check_ride_conflicts(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    f'Instruktor „{instructor_name}” prowadzi już '
-                    "inną jazdę w tym czasie."
+                    f'Instruktor „{instructor_name}” prowadzi '
+                    "już inną jazdę w tym czasie."
                 ),
             )
 
@@ -137,12 +147,25 @@ def list_rides(db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=RideRead)
-def create_ride(payload: RideCreate, db: Session = Depends(get_db)):
+def create_ride(
+    payload: RideCreate,
+    db: Session = Depends(get_db),
+):
     check_ride_conflicts(db, payload)
 
     ride = Ride(**payload.model_dump())
+    ride.pass_entry_deducted = False
 
     db.add(ride)
+    db.flush()
+
+    apply_pass_status_change(
+        db=db,
+        ride=ride,
+        old_status=None,
+        new_status=payload.status,
+    )
+
     db.commit()
     db.refresh(ride)
 
@@ -158,11 +181,17 @@ def create_ride(payload: RideCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/{ride_id}", response_model=RideRead)
-def get_ride(ride_id: int, db: Session = Depends(get_db)):
+def get_ride(
+    ride_id: int,
+    db: Session = Depends(get_db),
+):
     ride = get_ride_with_relations(db, ride_id)
 
-    if not ride:
-        raise HTTPException(status_code=404, detail="Nie znaleziono jazdy.")
+    if ride is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Nie znaleziono jazdy.",
+        )
 
     return ride_to_read(ride)
 
@@ -175,8 +204,11 @@ def update_ride(
 ):
     ride = db.get(Ride, ride_id)
 
-    if not ride:
-        raise HTTPException(status_code=404, detail="Nie znaleziono jazdy.")
+    if ride is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Nie znaleziono jazdy.",
+        )
 
     check_ride_conflicts(
         db=db,
@@ -184,8 +216,17 @@ def update_ride(
         excluded_ride_id=ride_id,
     )
 
+    old_status = ride.status
+
     for key, value in payload.model_dump().items():
         setattr(ride, key, value)
+
+    apply_pass_status_change(
+        db=db,
+        ride=ride,
+        old_status=old_status,
+        new_status=payload.status,
+    )
 
     db.commit()
 
@@ -204,11 +245,25 @@ def update_ride(
     "/{ride_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def delete_ride(ride_id: int, db: Session = Depends(get_db)):
+def delete_ride(
+    ride_id: int,
+    db: Session = Depends(get_db),
+):
     ride = db.get(Ride, ride_id)
 
-    if not ride:
-        raise HTTPException(status_code=404, detail="Nie znaleziono jazdy.")
+    if ride is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Nie znaleziono jazdy.",
+        )
+
+    if ride.status == "completed":
+        apply_pass_status_change(
+            db=db,
+            ride=ride,
+            old_status="completed",
+            new_status="planned",
+        )
 
     db.delete(ride)
     db.commit()
