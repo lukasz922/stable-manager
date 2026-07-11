@@ -1,3 +1,4 @@
+from app.models.pass_history import PassHistory
 from datetime import datetime
 
 from fastapi import HTTPException, status
@@ -54,11 +55,21 @@ def deduct_pass_entry(
         )
 
     client_pass.remaining_entries -= 1
-    ride.pass_entry_deducted = True
+ride.pass_entry_deducted = True
 
-    if client_pass.remaining_entries <= 0:
-        client_pass.remaining_entries = 0
-        client_pass.active = False
+history = PassHistory(
+    pass_id=client_pass.id,
+    ride_id=ride.id,
+    operation="DEDUCT",
+    entries=1,
+    note="Odliczono wejście po oznaczeniu jazdy jako odbytej.",
+)
+
+db.add(history)
+
+if client_pass.remaining_entries <= 0:
+    client_pass.remaining_entries = 0
+    client_pass.active = False
 
 
 def restore_pass_entry(
@@ -89,7 +100,15 @@ def restore_pass_entry(
             client_pass.remaining_entries + 1,
             client_pass.total_entries,
         )
+      history = PassHistory(
+        pass_id=client_pass.id,
+        ride_id=ride.id,
+        operation="RESTORE",
+        entries=1,
+        note="Zwrócono wejście po cofnięciu statusu jazdy.",
+    )
 
+    db.add(history)
         if client_pass.remaining_entries > 0:
             client_pass.active = True
 
