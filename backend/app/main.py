@@ -6,6 +6,7 @@ from app.api.clients import router as clients_router
 from app.api.horses import router as horses_router
 from app.api.instructors import router as instructors_router
 from app.api.rides import router as rides_router
+from app.api.passes import router as passes_router
 
 from app.db.base import Base
 from app.db.session import engine
@@ -13,6 +14,8 @@ from app.models.user import User
 from app.models.client import Client
 from app.models.horse import Horse
 from app.models.instructor import Instructor
+from app.models.client_pass import Pass
+
 
 
 from app.models.ride import Ride
@@ -37,7 +40,7 @@ app.include_router(clients_router)
 app.include_router(horses_router)
 app.include_router(instructors_router)
 app.include_router(rides_router)
-
+app.include_router(passes_router)
 
 
 @app.get("/")
