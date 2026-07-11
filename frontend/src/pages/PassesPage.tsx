@@ -27,6 +27,11 @@ import {
   type ClientPass,
 } from "../api/passes";
 
+import {
+  getPassHistory,
+  type PassHistoryItem,
+} from "../api/passHistory";
+
 const emptyForm = {
   client_id: "",
   name: "Karnet 10 wejść",
@@ -49,6 +54,10 @@ export function PassesPage() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [search, setSearch] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [history, setHistory] = useState<PassHistoryItem[]>([]);
+  const [historyPassName, setHistoryPassName] = useState("");
 
   useEffect(() => {
     loadData();
@@ -214,6 +223,32 @@ export function PassesPage() {
     }
   }
 
+async function openHistory(passItem: ClientPass) {
+  console.log("Kliknięto historię", passItem);
+
+  setHistoryOpen(true);
+  setHistoryLoading(true);
+  setHistory([]);
+  setHistoryPassName(passItem.name);
+  setError("");
+
+  try {
+    const data = await getPassHistory(passItem.id);
+
+    console.log("Historia:", data);
+    setHistory(data);
+  } catch (err) {
+    console.error("Błąd historii:", err);
+
+    setError(
+      err instanceof Error
+        ? err.message
+        : "Nie udało się pobrać historii."
+    );
+  } finally {
+    setHistoryLoading(false);
+  }
+}
   const filteredPasses = passes.filter((passItem) => {
     const phrase = search.toLowerCase();
 
@@ -355,25 +390,32 @@ export function PassesPage() {
                     color={status.color}
                   />
 
-                  <Box sx={{ mt: 2 }}>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      sx={{ mr: 1 }}
-                      onClick={() => openEditDialog(passItem)}
-                    >
-                      Edytuj
-                    </Button>
+             <Box sx={{ mt: 2, display: "flex", gap: 1, flexWrap: "wrap" }}>
+  <Button
+    variant="outlined"
+    size="small"
+    onClick={() => openEditDialog(passItem)}
+  >
+    Edytuj
+  </Button>
 
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      size="small"
-                      onClick={() => handleDelete(passItem)}
-                    >
-                      Usuń
-                    </Button>
-                  </Box>
+  <Button
+    variant="outlined"
+    size="small"
+    onClick={() => openHistory(passItem)}
+  >
+    Historia
+  </Button>
+
+  <Button
+    variant="outlined"
+    color="error"
+    size="small"
+    onClick={() => handleDelete(passItem)}
+  >
+    Usuń
+  </Button>
+</Box>
                 </CardContent>
               </Card>
             );
@@ -506,6 +548,71 @@ export function PassesPage() {
             {editingPassId !== null
               ? "Zapisz zmiany"
               : "Dodaj karnet"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+            <Dialog
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>
+          📜 Historia karnetu — {historyPassName}
+        </DialogTitle>
+
+        <DialogContent>
+          {historyLoading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : history.length === 0 ? (
+            <Typography color="text.secondary">
+              Brak operacji w historii tego karnetu.
+            </Typography>
+          ) : (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              {history.map((item) => (
+                <Box
+                  key={item.id}
+                  sx={{
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 2,
+                    p: 2,
+                  }}
+                >
+                  <Typography fontWeight={700}>
+                    {item.operation === "DEDUCT"
+                      ? "➖ Odliczono wejście"
+                      : "➕ Zwrócono wejście"}
+                  </Typography>
+
+                  <Typography variant="body2" color="text.secondary">
+                    {new Date(item.created_at).toLocaleString("pl-PL")}
+                  </Typography>
+
+                  {item.ride_id !== null &&
+                    item.ride_id !== undefined && (
+                      <Typography variant="body2">
+                        Jazda #{item.ride_id}
+                      </Typography>
+                    )}
+
+                  {item.note && (
+                    <Typography sx={{ mt: 1 }}>
+                      {item.note}
+                    </Typography>
+                  )}
+                </Box>
+              ))}
+            </Stack>
+          )}
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={() => setHistoryOpen(false)}>
+            Zamknij
           </Button>
         </DialogActions>
       </Dialog>
