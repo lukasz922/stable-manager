@@ -21,7 +21,7 @@ class PassHistory(Base):
     )
 
     ride_id: Mapped[int | None] = mapped_column(
-        ForeignKey("rides.id"),
+        ForeignKey("rides.id", ondelete="SET NULL"),
         nullable=True,
     )
 
@@ -33,6 +33,7 @@ class PassHistory(Base):
     entries: Mapped[int] = mapped_column(
         Integer,
         default=1,
+        nullable=False,
     )
 
     note: Mapped[str | None] = mapped_column(
@@ -44,6 +45,31 @@ class PassHistory(Base):
         DateTime,
         default=datetime.utcnow,
         nullable=False,
+    )
+
+    ride_date: Mapped[str | None] = mapped_column(
+        String(10),
+        nullable=True,
+    )
+
+    ride_start_time: Mapped[str | None] = mapped_column(
+        String(5),
+        nullable=True,
+    )
+
+    horse_name: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    client_name: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+    )
+
+    instructor_name: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
     )
 
     pass_obj = relationship("Pass")

@@ -40,23 +40,65 @@ def find_available_pass(
     )
 
 
+def get_ride_snapshot(ride: Ride) -> dict[str, str | None]:
+    """
+    Przygotowuje migawkę danych jazdy do zapisania w historii.
+
+    Dzięki temu informacje pozostają dostępne nawet wtedy,
+    gdy sama jazda zostanie później usunięta.
+    """
+    client_name = None
+    horse_name = None
+    instructor_name = None
+
+    if ride.client:
+        client_name = (
+            f"{ride.client.first_name} {ride.client.last_name}"
+        ).strip()
+
+    if ride.horse:
+        horse_name = ride.horse.name
+
+    if ride.instructor:
+        instructor_name = (
+            f"{ride.instructor.first_name} "
+            f"{ride.instructor.last_name}"
+        ).strip()
+
+    return {
+        "ride_date": ride.start_time.strftime("%Y-%m-%d"),
+        "ride_start_time": ride.start_time.strftime("%H:%M"),
+        "horse_name": horse_name,
+        "client_name": client_name,
+        "instructor_name": instructor_name,
+    }
+
+
 def save_pass_history(
     db: Session,
     pass_id: int,
-    ride_id: int | None,
+    ride: Ride,
     operation: str,
     note: str,
     entries: int = 1,
 ) -> None:
     """
-    Zapisuje operację wykorzystania lub zwrotu wejścia.
+    Zapisuje operację wykorzystania lub zwrotu wejścia
+    razem z migawką danych jazdy.
     """
+    snapshot = get_ride_snapshot(ride)
+
     history = PassHistory(
         pass_id=pass_id,
-        ride_id=ride_id,
+        ride_id=ride.id,
         operation=operation,
         entries=entries,
         note=note,
+        ride_date=snapshot["ride_date"],
+        ride_start_time=snapshot["ride_start_time"],
+        horse_name=snapshot["horse_name"],
+        client_name=snapshot["client_name"],
+        instructor_name=snapshot["instructor_name"],
     )
 
     db.add(history)
@@ -124,10 +166,10 @@ def deduct_pass_entry(
     save_pass_history(
         db=db,
         pass_id=client_pass.id,
-        ride_id=ride.id,
+        ride=ride,
         operation="DEDUCT",
         entries=1,
-        note="Odliczono wejście po oznaczeniu jazdy jako odbytej.",
+        note="Jazda została zakończona automatycznie – odliczono 1 wejście z karnetu.",
     )
 
 
@@ -183,7 +225,7 @@ def restore_pass_entry(
     save_pass_history(
         db=db,
         pass_id=client_pass.id,
-        ride_id=ride.id,
+        ride=ride,
         operation="RESTORE",
         entries=1,
         note="Zwrócono wejście po cofnięciu statusu jazdy.",

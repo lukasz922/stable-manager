@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_
@@ -6,7 +6,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.db.session import get_db
 from app.models.ride import Ride
-from app.schemas.ride import RideCreate, RideRead
+from app.schemas.ride import (
+    RideCreate,
+    RideRead,
+    RideStatusUpdate,
+)
 from app.services.pass_service import apply_pass_status_change
 
 router = APIRouter(prefix="/rides", tags=["Rides"])
@@ -35,7 +39,6 @@ def ride_to_read(ride: Ride) -> RideRead:
             else None
         ),
     )
-
 
 def get_ride_with_relations(
     db: Session,
@@ -128,10 +131,43 @@ def check_ride_conflicts(
                     "już inną jazdę w tym czasie."
                 ),
             )
+def update_finished_rides(db: Session) -> None:
+    now = datetime.now()
 
+    rides = (
+        db.query(Ride)
+        .filter(Ride.status == "checked_in")
+        .all()
+    )
+
+    changed = False
+
+    for ride in rides:
+        end_time = ride.start_time + timedelta(
+            minutes=ride.duration_minutes
+        )
+
+        if end_time > now:
+            continue
+
+        old_status = ride.status
+        ride.status = "completed"
+
+        apply_pass_status_change(
+            db=db,
+            ride=ride,
+            old_status=old_status,
+            new_status="completed",
+        )
+
+        changed = True
+
+    if changed:
+        db.commit()
 
 @router.get("", response_model=list[RideRead])
 def list_rides(db: Session = Depends(get_db)):
+    update_finished_rides(db)
     rides = (
         db.query(Ride)
         .options(
@@ -179,6 +215,24 @@ def create_ride(
 
     return ride_to_read(saved_ride)
 
+@router.get("/client/{client_id}", response_model=list[RideRead])
+def list_client_rides(
+    client_id: int,
+    db: Session = Depends(get_db),
+):
+    rides = (
+        db.query(Ride)
+        .options(
+            joinedload(Ride.client),
+            joinedload(Ride.horse),
+            joinedload(Ride.instructor),
+        )
+        .filter(Ride.client_id == client_id)
+        .order_by(Ride.start_time.desc())
+        .all()
+    )
+
+    return [ride_to_read(ride) for ride in rides]
 
 @router.get("/{ride_id}", response_model=RideRead)
 def get_ride(
@@ -240,6 +294,41 @@ def update_ride(
 
     return ride_to_read(updated_ride)
 
+@router.patch("/{ride_id}/status", response_model=RideRead)
+def update_ride_status(
+    ride_id: int,
+    payload: RideStatusUpdate,
+    db: Session = Depends(get_db),
+):
+    ride = db.get(Ride, ride_id)
+
+    if ride is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Nie znaleziono jazdy.",
+        )
+
+    old_status = ride.status
+    ride.status = payload.status
+
+    apply_pass_status_change(
+        db=db,
+        ride=ride,
+        old_status=old_status,
+        new_status=payload.status,
+    )
+
+    db.commit()
+
+    updated_ride = get_ride_with_relations(db, ride_id)
+
+    if updated_ride is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Nie udało się odczytać jazdy.",
+        )
+
+    return ride_to_read(updated_ride)
 
 @router.delete(
     "/{ride_id}",

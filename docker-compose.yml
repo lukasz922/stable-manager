@@ -22,6 +22,8 @@ services:
       DATABASE_URL: postgresql+psycopg://stable_user:stable_password@db:5432/stable_manager
       SECRET_KEY: change_me_super_secret
       ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+      TZ: Europe/Warsaw
+      environment:
     ports:
       - "8000:8000"
     volumes:

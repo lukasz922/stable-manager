@@ -573,39 +573,86 @@ async function openHistory(passItem: ClientPass) {
             </Typography>
           ) : (
             <Stack spacing={2} sx={{ mt: 1 }}>
-              {history.map((item) => (
-                <Box
-                  key={item.id}
-                  sx={{
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 2,
-                    p: 2,
-                  }}
-                >
-                  <Typography fontWeight={700}>
-                    {item.operation === "DEDUCT"
-                      ? "➖ Odliczono wejście"
-                      : "➕ Zwrócono wejście"}
-                  </Typography>
+             {history.map((item) => (
+  <Box
+    key={item.id}
+    sx={{
+      border: "1px solid #e5e7eb",
+      borderRadius: 2,
+      p: 2,
+    }}
+  >
+    <Typography fontWeight={700}>
+      {item.operation === "DEDUCT"
+        ? "➖ Odliczono wejście"
+        : "➕ Zwrócono wejście"}
+    </Typography>
 
-                  <Typography variant="body2" color="text.secondary">
-                    {new Date(item.created_at).toLocaleString("pl-PL")}
-                  </Typography>
+    {item.ride_date ? (
+      <>
+        <Typography
+          variant="body2"
+          fontWeight={700}
+          sx={{ mt: 1 }}
+        >
+          📅 {new Date(`${item.ride_date}T00:00:00`).toLocaleDateString("pl-PL")}
+{item.ride_start_time
+  ? `, ${item.ride_start_time}`
+  : ""}
+        </Typography>
 
-                  {item.ride_id !== null &&
-                    item.ride_id !== undefined && (
-                      <Typography variant="body2">
-                        Jazda #{item.ride_id}
-                      </Typography>
-                    )}
+        {item.client_name && (
+          <Typography variant="body2">
+            👤 {item.client_name}
+          </Typography>
+        )}
 
-                  {item.note && (
-                    <Typography sx={{ mt: 1 }}>
-                      {item.note}
-                    </Typography>
-                  )}
-                </Box>
-              ))}
+        {item.horse_name && (
+          <Typography variant="body2">
+            🐴 {item.horse_name}
+          </Typography>
+        )}
+
+        {item.instructor_name && (
+          <Typography variant="body2">
+            👨‍🏫 {item.instructor_name}
+          </Typography>
+        )}
+      </>
+    ) : item.ride_id ? (
+      <Typography variant="body2" sx={{ mt: 1 }}>
+        Jazda #{item.ride_id}
+      </Typography>
+    ) : (
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        sx={{ mt: 1 }}
+      >
+        🗑️ Jazda została usunięta
+      </Typography>
+    )}
+
+    <Typography
+      variant="body2"
+      color="text.secondary"
+      sx={{ mt: 1 }}
+    >
+      🕒 Operacja:{" "}
+      {new Date(
+        item.created_at.endsWith("Z")
+          ? item.created_at
+          : `${item.created_at}Z`
+      ).toLocaleString("pl-PL")}
+    </Typography>
+
+    {item.note && (
+      <Typography sx={{ mt: 1 }}>
+        {item.note}
+      </Typography>
+    )}
+  </Box>
+))}
             </Stack>
           )}
         </DialogContent>

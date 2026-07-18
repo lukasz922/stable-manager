@@ -39,6 +39,7 @@ const emptyForm = {
   client_id: "",
   horse_id: "",
   instructor_id: "",
+  start_time: "",
   duration_minutes: "60",
   status: "planned",
   notes: "",
@@ -96,10 +97,13 @@ export function RideDialog({
 
     setError("");
 
-    if (rideId === null) {
-      setForm(emptyForm);
-      return;
-    }
+if (rideId === null) {
+  setForm({
+    ...emptyForm,
+    start_time: selectedDate.slice(0, 16),
+  });
+  return;
+}
 
     async function loadSelectedRide() {
       try {
@@ -111,6 +115,7 @@ export function RideDialog({
   client_id: String(ride.client_id),
   horse_id: String(ride.horse_id),
   instructor_id: String(ride.instructor_id),
+  start_time: ride.start_time.slice(0, 16),
   duration_minutes: String(ride.duration_minutes),
   status: ride.status || "planned",
   notes: ride.notes || "",
@@ -149,16 +154,16 @@ export function RideDialog({
       return;
     }
 
-    if (!selectedDate) {
-      setError("Nie wybrano terminu jazdy.");
-      return;
-    }
+    if (!form.start_time) {
+    setError("Nie wybrano terminu jazdy.");
+    return;
+}
 
     const payload = {
       client_id: Number(form.client_id),
       horse_id: Number(form.horse_id),
       instructor_id: Number(form.instructor_id),
-      start_time: normalizeDate(selectedDate),
+      start_time: normalizeDate(form.start_time),
       duration_minutes: Number(form.duration_minutes),
       ride_type: "individual",
       status: form.status,
@@ -320,10 +325,19 @@ export function RideDialog({
             </TextField>
 
             <TextField
-              label="Termin"
-              value={selectedDate}
-              disabled
-            />
+  required
+  type="datetime-local"
+  label="Data i godzina rozpoczęcia"
+  value={form.start_time}
+  InputLabelProps={{ shrink: true }}
+  inputProps={{ step: 900 }}
+  onChange={(event) =>
+    setForm({
+      ...form,
+      start_time: event.target.value,
+    })
+  }
+/>
 
             <TextField
               select
@@ -352,9 +366,10 @@ export function RideDialog({
     })
   }
 >
-  <MenuItem value="planned">Zaplanowana</MenuItem>
-  <MenuItem value="completed">Odbyła się</MenuItem>
-  <MenuItem value="cancelled">Odwołana</MenuItem>
+  <MenuItem value="planned">📅 Zaplanowana</MenuItem>
+  <MenuItem value="checked_in">🟠 Odbito / klient obecny</MenuItem>
+  <MenuItem value="completed">✅ Odbyła się</MenuItem>
+  <MenuItem value="cancelled">❌ Odwołana</MenuItem>
 </TextField>
             <TextField
               multiline

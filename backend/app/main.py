@@ -8,6 +8,8 @@ from app.api.instructors import router as instructors_router
 from app.api.rides import router as rides_router
 from app.api.passes import router as passes_router
 from app.api.pass_history import router as pass_history_router
+from app.api.checkin import router as checkin_router
+from app.api.dashboard import router as dashboard_router
 
 from app.db.base import Base
 from app.db.session import engine
@@ -43,7 +45,8 @@ app.include_router(instructors_router)
 app.include_router(rides_router)
 app.include_router(passes_router)
 app.include_router(pass_history_router)
-
+app.include_router(checkin_router)
+app.include_router(dashboard_router)
 @app.get("/")
 def root():
     return {"app": "StableManager", "status": "running"}

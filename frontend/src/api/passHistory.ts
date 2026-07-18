@@ -8,6 +8,13 @@ export type PassHistoryItem = {
   entries: number;
   note?: string | null;
   created_at: string;
+
+  ride_date?: string | null;
+  ride_start_time?: string | null;
+  horse_name?: string | null;
+  client_name?: string | null;
+  instructor_name?: string | null;
+
 };
 
 async function getErrorMessage(
