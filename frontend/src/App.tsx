@@ -22,6 +22,7 @@ import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
 import PaymentsIcon from "@mui/icons-material/Payments";
 import BarChartIcon from "@mui/icons-material/BarChart";
 import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
+import MeetingRoomIcon from "@mui/icons-material/MeetingRoom";
 
 import { LoginPage } from "./pages/LoginPage";
 import { ClientsPage } from "./pages/ClientsPage";
@@ -31,11 +32,13 @@ import { ScannerPage } from "./pages/ScannerPage";
 import { InstructorsPage } from "./pages/InstructorsPage";
 import { CalendarPage } from "./pages/CalendarPage";
 import { PassesPage } from "./pages/PassesPage";
+import { ReceptionPage } from "./pages/ReceptionPage";
 
 const drawerWidth = 260;
 
 const menu = [
   { label: "Dashboard", path: "/dashboard", icon: <DashboardIcon /> },
+  { label: "Recepcja", path: "/reception", icon: <MeetingRoomIcon />, },
   { label: "Kalendarz", path: "/calendar", icon: <CalendarMonthIcon /> },
   { label: "Klienci", path: "/clients", icon: <PeopleIcon /> },
   { label: "Konie", path: "/horses", icon: <PetsIcon /> },
@@ -117,6 +120,7 @@ function App() {
           <Route path="/payments" element={<PlaceholderPage title="Płatności" />} />
           <Route path="/reports" element={<PlaceholderPage title="Raporty" />} />
 	  <Route path="/calendar" element={<CalendarPage />} />
+	  <Route path="/reception" element={<ReceptionPage />} />
         </Routes>
       </Box>
     </Box>
