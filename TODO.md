@@ -2,7 +2,7 @@
 
 ## 🔴 Najwyższy priorytet
 
-- [ ] Kalendarz jazd
+
 - [ ] Płatności
 - [ ] Historia płatności
 - [ ] Dashboard statystyk

@@ -11,6 +11,7 @@ from app.api.pass_history import router as pass_history_router
 from app.api.checkin import router as checkin_router
 from app.api.dashboard import router as dashboard_router
 from app.api.reception import router as reception_router
+from app.api.reports import router as reports_router
 
 from app.db.base import Base
 from app.db.session import engine
@@ -49,6 +50,7 @@ app.include_router(pass_history_router)
 app.include_router(checkin_router)
 app.include_router(dashboard_router)
 app.include_router(reception_router)
+app.include_router(reports_router)
 @app.get("/")
 def root():
     return {"app": "StableManager", "status": "running"}
