@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.session import get_db
+from app.core.dependencies import require_permission
 from app.models.client import Client
 from app.models.client_pass import Pass
 from app.models.ride import Ride
@@ -54,12 +55,43 @@ class QuickRideResponse(BaseModel):
     ride_id: int
     status: str
 
+def find_active_checked_in_ride(
+    db: Session,
+    client_id: int,
+    now: datetime,
+) -> Ride | None:
+    """
+    Zwraca trwającą jazdę klienta ze statusem checked_in.
+    Jazda jest aktywna do czasu: start_time + duration_minutes.
+    """
+    checked_in_rides = (
+        db.query(Ride)
+        .filter(
+            Ride.client_id == client_id,
+            Ride.status == "checked_in",
+        )
+        .order_by(Ride.start_time.desc())
+        .all()
+    )
+
+    for existing_ride in checked_in_rides:
+        ride_end = existing_ride.start_time + timedelta(
+            minutes=existing_ride.duration_minutes
+        )
+
+        if ride_end > now:
+            return existing_ride
+
+    return None
+
+
 @router.post(
     "/rfid",
     response_model=RfidCheckInResponse,
 )
 def check_in_by_rfid(
     payload: RfidCheckInRequest,
+    current_user=Depends(require_permission("scanner.use")),
     db: Session = Depends(get_db),
 ):
     rfid_uid = payload.rfid_uid.strip()
@@ -109,9 +141,25 @@ def check_in_by_rfid(
         .first()
     )
 
-    # Brak zaplanowanej jazdy — frontend może otworzyć
-    # formularz szybkiej jazdy.
+    # Brak jazdy w oknie czasowym. Zanim otworzymy formularz
+    # szybkiej jazdy, sprawdzamy, czy klient nie ma już
+    # rozpoczętej innej jazdy.
     if ride is None:
+        active_ride = find_active_checked_in_ride(
+            db=db,
+            client_id=client.id,
+            now=now,
+        )
+
+        if active_ride is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Klient ma już rozpoczętą jazdę "
+                    f"(ID: {active_ride.id})."
+                ),
+            )
+
         today = now.date()
 
         available_passes = (
@@ -149,11 +197,19 @@ def check_in_by_rfid(
             ],
         )
 
-    # Znaleziono zaplanowaną jazdę.
-    if ride.status == "planned":
-        ride.status = "checked_in"
-        db.commit()
-        db.refresh(ride)
+    # Znaleziono jazdę w oknie czasowym.
+    if ride.status == "checked_in":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Ta jazda została już wcześniej odbita. "
+                "Klient ma status „Obecny”."
+            ),
+        )
+
+    ride.status = "checked_in"
+    db.commit()
+    db.refresh(ride)
 
     horse_name = (
         ride.horse.name
@@ -186,9 +242,14 @@ def check_in_by_rfid(
 )
 def create_quick_ride(
     payload: QuickRideRequest,
+    current_user=Depends(require_permission("scanner.use")),
     db: Session = Depends(get_db),
 ):
-    client = db.query(Client).filter(Client.id == payload.client_id).first()
+    client = (
+        db.query(Client)
+        .filter(Client.id == payload.client_id)
+        .first()
+    )
 
     if client is None:
         raise HTTPException(
@@ -196,7 +257,29 @@ def create_quick_ride(
             detail="Klient nie istnieje.",
         )
 
-    horse = db.query(Horse).filter(Horse.id == payload.horse_id).first()
+    now = datetime.now()
+
+    active_ride = find_active_checked_in_ride(
+        db=db,
+        client_id=client.id,
+        now=now,
+    )
+
+    if active_ride is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Nie można utworzyć szybkiej jazdy. "
+                "Klient ma już rozpoczętą jazdę "
+                f"(ID: {active_ride.id})."
+            ),
+        )
+
+    horse = (
+        db.query(Horse)
+        .filter(Horse.id == payload.horse_id)
+        .first()
+    )
 
     if horse is None:
         raise HTTPException(
@@ -216,14 +299,57 @@ def create_quick_ride(
             detail="Instruktor nie istnieje.",
         )
 
+    client_pass = (
+        db.query(Pass)
+        .filter(Pass.id == payload.pass_id)
+        .first()
+    )
+
+    if client_pass is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Wybrany karnet nie istnieje.",
+        )
+
+    if client_pass.client_id != client.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Wybrany karnet nie należy do tego klienta.",
+        )
+
+    today = now.date()
+
+    if not client_pass.active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Wybrany karnet jest nieaktywny.",
+        )
+
+    if client_pass.remaining_entries <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Wybrany karnet nie ma dostępnych wejść.",
+        )
+
+    if not (
+        client_pass.valid_from <= today
+        <= client_pass.valid_until
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Wybrany karnet nie jest obecnie ważny.",
+        )
+
     ride = Ride(
         client_id=payload.client_id,
         horse_id=payload.horse_id,
         instructor_id=payload.instructor_id,
-        start_time=datetime.now(),
+        pass_id=payload.pass_id,
+        start_time=now,
         duration_minutes=payload.duration_minutes,
         ride_type="individual",
         status="checked_in",
+        pass_entry_deducted=False,
     )
 
     db.add(ride)

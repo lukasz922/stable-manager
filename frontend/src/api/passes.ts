@@ -1,4 +1,4 @@
-const API = "http://localhost:8000";
+import { api } from "./client";
 
 export type ClientPass = {
   id: number;
@@ -22,96 +22,46 @@ export type ClientPassCreate = {
   active: boolean;
 };
 
-async function getErrorMessage(
-  response: Response,
-  fallback: string
-): Promise<string> {
-  try {
-    const data = await response.json();
-
-    if (typeof data?.detail === "string") {
-      return data.detail;
-    }
-  } catch {
-    // Odpowiedź nie była JSON-em.
-  }
-
-  return fallback;
-}
-
 export async function getPasses(): Promise<ClientPass[]> {
-  const response = await fetch(`${API}/passes`);
-
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(response, "Nie udało się pobrać karnetów.")
-    );
-  }
-
-  return response.json();
+  const { data } = await api.get<ClientPass[]>("/passes");
+  return data;
 }
 
-export async function getPass(id: number): Promise<ClientPass> {
-  const response = await fetch(`${API}/passes/${id}`);
+export async function getPass(
+  passId: number
+): Promise<ClientPass> {
+  const { data } = await api.get<ClientPass>(
+    `/passes/${passId}`
+  );
 
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(response, "Nie udało się pobrać karnetu.")
-    );
-  }
-
-  return response.json();
+  return data;
 }
 
 export async function createPass(
-  data: ClientPassCreate
+  payload: ClientPassCreate
 ): Promise<ClientPass> {
-  const response = await fetch(`${API}/passes`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
+  const { data } = await api.post<ClientPass>(
+    "/passes",
+    payload
+  );
 
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(response, "Nie udało się dodać karnetu.")
-    );
-  }
-
-  return response.json();
+  return data;
 }
 
 export async function updatePass(
-  id: number,
-  data: Partial<ClientPassCreate>
+  passId: number,
+  payload: Partial<ClientPassCreate>
 ): Promise<ClientPass> {
-  const response = await fetch(`${API}/passes/${id}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
+  const { data } = await api.put<ClientPass>(
+    `/passes/${passId}`,
+    payload
+  );
 
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(response, "Nie udało się zaktualizować karnetu.")
-    );
-  }
-
-  return response.json();
+  return data;
 }
 
-export async function deletePass(id: number): Promise<void> {
-  const response = await fetch(`${API}/passes/${id}`, {
-    method: "DELETE",
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(response, "Nie udało się usunąć karnetu.")
-    );
-  }
+export async function deletePass(
+  passId: number
+): Promise<void> {
+  await api.delete(`/passes/${passId}`);
 }

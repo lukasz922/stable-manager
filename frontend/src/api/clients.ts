@@ -1,4 +1,4 @@
-const API = "http://localhost:8000";
+import { api } from "./client";
 
 export type Client = {
   id: number;
@@ -11,6 +11,7 @@ export type Client = {
   qr_code?: string | null;
   rfid_uid?: string | null;
   notes?: string | null;
+  is_active: boolean;
 };
 
 export type ClientCreate = {
@@ -23,61 +24,58 @@ export type ClientCreate = {
   qr_code?: string;
   rfid_uid?: string;
   notes?: string;
+  is_active?: boolean;
 };
 
-export async function getClients(): Promise<Client[]> {
-  const response = await fetch(`${API}/clients`);
+export type ClientFilter = "active" | "inactive" | "all";
 
-  if (!response.ok) {
-    throw new Error("Nie udało się pobrać klientów.");
-  }
-
-  return response.json();
+export async function getClients(
+  filter: ClientFilter = "all",
+): Promise<Client[]> {
+  const { data } = await api.get<Client[]>("/clients", {
+    params: { status: filter },
+  });
+  return data;
 }
 
 export async function createClient(
-  data: ClientCreate
+  payload: ClientCreate,
 ): Promise<Client> {
-  const response = await fetch(`${API}/clients`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    throw new Error("Nie udało się dodać klienta.");
-  }
-
-  return response.json();
+  const { data } = await api.post<Client>("/clients", payload);
+  return data;
 }
 
 export async function updateClient(
-  id: number,
-  data: ClientCreate
+  clientId: number,
+  payload: Partial<ClientCreate>,
 ): Promise<Client> {
-  const response = await fetch(`${API}/clients/${id}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    throw new Error("Nie udało się zaktualizować klienta.");
-  }
-
-  return response.json();
+  const { data } = await api.patch<Client>(
+    `/clients/${clientId}`,
+    payload,
+  );
+  return data;
 }
 
-export async function deleteClient(id: number): Promise<void> {
-  const response = await fetch(`${API}/clients/${id}`, {
-    method: "DELETE",
-  });
+export async function deactivateClient(
+  clientId: number,
+): Promise<Client> {
+  const { data } = await api.post<Client>(
+    `/clients/${clientId}/deactivate`,
+  );
+  return data;
+}
 
-  if (!response.ok) {
-    throw new Error("Nie udało się usunąć klienta.");
-  }
+export async function activateClient(
+  clientId: number,
+): Promise<Client> {
+  const { data } = await api.post<Client>(
+    `/clients/${clientId}/activate`,
+  );
+  return data;
+}
+
+export async function deleteClient(
+  clientId: number,
+): Promise<void> {
+  await api.delete(`/clients/${clientId}`);
 }

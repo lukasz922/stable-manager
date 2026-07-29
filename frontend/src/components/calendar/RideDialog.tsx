@@ -22,8 +22,15 @@ import {
   createRide,
   deleteRide,
   getRide,
+  getRides,
   updateRide,
+  type Ride,
 } from "../../api/rides";
+import { useAuth } from "../../auth/AuthContext";
+import {
+  getInstructorSchedule,
+  type InstructorSchedule,
+} from "../../api/instructorSchedule";
 
 type RideAction = "created" | "updated" | "deleted";
 
@@ -52,9 +59,13 @@ export function RideDialog({
   onClose,
   onSaved,
 }: RideDialogProps) {
+  const { hasPermission } = useAuth();
+  const canManageCalendar = hasPermission("calendar.manage");
   const [clients, setClients] = useState<Client[]>([]);
   const [horses, setHorses] = useState<Horse[]>([]);
   const [instructors, setInstructors] = useState<Instructor[]>([]);
+  const [rides, setRides] = useState<Ride[]>([]);
+  const [schedule, setSchedule] = useState<InstructorSchedule[]>([]);
 
   const [form, setForm] = useState(emptyForm);
   const [loadingData, setLoadingData] = useState(false);
@@ -64,31 +75,41 @@ export function RideDialog({
   const isEditing = rideId !== null;
 
   useEffect(() => {
+    if (!open) {
+      return;
+    }
+
     async function loadLists() {
       try {
         setLoadingData(true);
         setError("");
 
-        const [clientsData, horsesData, instructorsData] =
+        const [clientsData, horsesData, instructorsData, ridesData] =
           await Promise.all([
             getClients(),
             getHorses(),
             getInstructors(),
+            getRides(),
           ]);
 
         setClients(clientsData);
         setHorses(horsesData);
         setInstructors(instructorsData);
+        setRides(ridesData);
       } catch (err) {
         console.error(err);
-        setError("Nie udało się pobrać danych formularza.");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Nie udało się pobrać danych formularza."
+        );
       } finally {
         setLoadingData(false);
       }
     }
 
-    loadLists();
-  }, []);
+    void loadLists();
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -131,6 +152,412 @@ if (rideId === null) {
     loadSelectedRide();
   }, [open, rideId]);
 
+  useEffect(() => {
+    if (!open || !form.start_time) {
+      setSchedule([]);
+      return;
+    }
+
+    const parsedDate = new Date(form.start_time);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      setSchedule([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadSchedule() {
+      try {
+        const data = await getInstructorSchedule(
+          parsedDate.getFullYear(),
+          parsedDate.getMonth() + 1
+        );
+
+        if (!cancelled) {
+          setSchedule(data);
+        }
+      } catch (err) {
+        console.error(err);
+
+        if (!cancelled) {
+          setSchedule([]);
+          setError(
+            "Nie udało się pobrać grafiku instruktorów."
+          );
+        }
+      }
+    }
+
+    void loadSchedule();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, form.start_time]);
+
+  function toMinutes(value: string): number {
+    const [hours, minutes] = value.slice(0, 5).split(":").map(Number);
+    return hours * 60 + minutes;
+  }
+
+  type InstructorAvailability = {
+    instructor: Instructor;
+    available: boolean;
+    reason?: string;
+  };
+
+  function getInstructorAvailability(
+    instructor: Instructor
+  ): InstructorAvailability {
+    if (!form.start_time || form.status === "cancelled") {
+      return {
+        instructor,
+        available: true,
+      };
+    }
+
+    const date = form.start_time.slice(0, 10);
+    const startMinutes = toMinutes(form.start_time.slice(11, 16));
+    const endMinutes =
+      startMinutes + Number(form.duration_minutes || 0);
+
+    const scheduleEntry = schedule.find(
+      (item) =>
+        item.instructor_id === instructor.id &&
+        item.date.startsWith(date)
+    );
+
+    if (!scheduleEntry) {
+      return {
+        instructor,
+        available: false,
+        reason: "brak grafiku",
+      };
+    }
+
+    if (scheduleEntry.status !== "WORK") {
+      const statusLabels: Record<string, string> = {
+        OFF: "wolne",
+        VACATION: "urlop",
+        SICK: "chorobowe",
+        TRAINING: "szkolenie",
+      };
+
+      return {
+        instructor,
+        available: false,
+        reason:
+          statusLabels[scheduleEntry.status] ??
+          `status: ${scheduleEntry.status}`,
+      };
+    }
+
+    if (
+      !scheduleEntry.start_time ||
+      !scheduleEntry.end_time ||
+      !scheduleEntry.availability_start_time ||
+      !scheduleEntry.availability_end_time
+    ) {
+      return {
+        instructor,
+        available: false,
+        reason: "niepełny grafik",
+      };
+    }
+
+    const workStart = toMinutes(scheduleEntry.start_time);
+    const workEnd = toMinutes(scheduleEntry.end_time);
+    const availabilityStart = toMinutes(
+      scheduleEntry.availability_start_time
+    );
+    const availabilityEnd = toMinutes(
+      scheduleEntry.availability_end_time
+    );
+
+    if (
+      startMinutes < workStart ||
+      endMinutes > workEnd
+    ) {
+      return {
+        instructor,
+        available: false,
+        reason: `poza godzinami pracy ${scheduleEntry.start_time.slice(
+          0,
+          5
+        )}–${scheduleEntry.end_time.slice(0, 5)}`,
+      };
+    }
+
+    if (
+      startMinutes < availabilityStart ||
+      endMinutes > availabilityEnd
+    ) {
+      return {
+        instructor,
+        available: false,
+        reason: `poza dyspozycyjnością ${scheduleEntry.availability_start_time.slice(
+          0,
+          5
+        )}–${scheduleEntry.availability_end_time.slice(0, 5)}`,
+      };
+    }
+
+    const conflictingRide = rides.find((ride) => {
+      if (
+        ride.id === rideId ||
+        ride.status === "cancelled" ||
+        ride.instructor_id !== instructor.id
+      ) {
+        return false;
+      }
+
+      const existingStart = new Date(ride.start_time);
+      const selectedStart = new Date(form.start_time);
+
+      if (
+        Number.isNaN(existingStart.getTime()) ||
+        Number.isNaN(selectedStart.getTime())
+      ) {
+        return false;
+      }
+
+      const existingEnd = new Date(
+        existingStart.getTime() +
+          ride.duration_minutes * 60_000
+      );
+      const selectedEnd = new Date(
+        selectedStart.getTime() +
+          Number(form.duration_minutes || 0) * 60_000
+      );
+
+      return (
+        selectedStart < existingEnd &&
+        selectedEnd > existingStart
+      );
+    });
+
+    if (conflictingRide) {
+      const conflictStart = conflictingRide.start_time.slice(11, 16);
+      const conflictEndDate = new Date(
+        new Date(conflictingRide.start_time).getTime() +
+          conflictingRide.duration_minutes * 60_000
+      );
+      const conflictEnd = conflictEndDate
+        .toTimeString()
+        .slice(0, 5);
+
+      return {
+        instructor,
+        available: false,
+        reason: `inna jazda ${conflictStart}–${conflictEnd}`,
+      };
+    }
+
+    return {
+      instructor,
+      available: true,
+    };
+  }
+
+  const instructorAvailability = instructors
+    .map(getInstructorAvailability)
+    .sort((a, b) => {
+      if (a.available !== b.available) {
+        return a.available ? -1 : 1;
+      }
+
+      const aName =
+        `${a.instructor.first_name} ${a.instructor.last_name}`;
+      const bName =
+        `${b.instructor.first_name} ${b.instructor.last_name}`;
+
+      return aName.localeCompare(bName, "pl");
+    });
+
+  const availableInstructorsCount = instructorAvailability.filter(
+    (item) => item.available
+  ).length;
+
+  type ClientAvailability = {
+    client: Client;
+    available: boolean;
+    reason?: string;
+  };
+
+  function getClientAvailability(
+    client: Client
+  ): ClientAvailability {
+    if (!form.start_time || form.status === "cancelled") {
+      return {
+        client,
+        available: true,
+      };
+    }
+
+    const conflictingRide = rides.find((ride) => {
+      if (
+        ride.id === rideId ||
+        ride.status === "cancelled" ||
+        ride.client_id !== client.id
+      ) {
+        return false;
+      }
+
+      const existingStart = new Date(ride.start_time);
+      const selectedStart = new Date(form.start_time);
+
+      if (
+        Number.isNaN(existingStart.getTime()) ||
+        Number.isNaN(selectedStart.getTime())
+      ) {
+        return false;
+      }
+
+      const existingEnd = new Date(
+        existingStart.getTime() +
+          ride.duration_minutes * 60_000
+      );
+      const selectedEnd = new Date(
+        selectedStart.getTime() +
+          Number(form.duration_minutes || 0) * 60_000
+      );
+
+      return (
+        selectedStart < existingEnd &&
+        selectedEnd > existingStart
+      );
+    });
+
+    if (conflictingRide) {
+      const conflictStart = conflictingRide.start_time.slice(11, 16);
+      const conflictEndDate = new Date(
+        new Date(conflictingRide.start_time).getTime() +
+          conflictingRide.duration_minutes * 60_000
+      );
+      const conflictEnd = conflictEndDate
+        .toTimeString()
+        .slice(0, 5);
+
+      return {
+        client,
+        available: false,
+        reason: `inna jazda ${conflictStart}–${conflictEnd}`,
+      };
+    }
+
+    return {
+      client,
+      available: true,
+    };
+  }
+
+  const clientAvailability = clients
+    .map(getClientAvailability)
+    .sort((a, b) => {
+      if (a.available !== b.available) {
+        return a.available ? -1 : 1;
+      }
+
+      const aName =
+        `${a.client.first_name} ${a.client.last_name}`;
+      const bName =
+        `${b.client.first_name} ${b.client.last_name}`;
+
+      return aName.localeCompare(bName, "pl");
+    });
+
+  const availableClientsCount = clientAvailability.filter(
+    (item) => item.available
+  ).length;
+
+  type HorseAvailability = {
+    horse: Horse;
+    available: boolean;
+    reason?: string;
+  };
+
+  function getHorseAvailability(
+    horse: Horse
+  ): HorseAvailability {
+    if (!form.start_time || form.status === "cancelled") {
+      return {
+        horse,
+        available: true,
+      };
+    }
+
+    const conflictingRide = rides.find((ride) => {
+      if (
+        ride.id === rideId ||
+        ride.status === "cancelled" ||
+        ride.horse_id !== horse.id
+      ) {
+        return false;
+      }
+
+      const existingStart = new Date(ride.start_time);
+      const selectedStart = new Date(form.start_time);
+
+      if (
+        Number.isNaN(existingStart.getTime()) ||
+        Number.isNaN(selectedStart.getTime())
+      ) {
+        return false;
+      }
+
+      const existingEnd = new Date(
+        existingStart.getTime() +
+          ride.duration_minutes * 60_000
+      );
+      const selectedEnd = new Date(
+        selectedStart.getTime() +
+          Number(form.duration_minutes || 0) * 60_000
+      );
+
+      return (
+        selectedStart < existingEnd &&
+        selectedEnd > existingStart
+      );
+    });
+
+    if (conflictingRide) {
+      const conflictStart = conflictingRide.start_time.slice(11, 16);
+      const conflictEndDate = new Date(
+        new Date(conflictingRide.start_time).getTime() +
+          conflictingRide.duration_minutes * 60_000
+      );
+      const conflictEnd = conflictEndDate
+        .toTimeString()
+        .slice(0, 5);
+
+      return {
+        horse,
+        available: false,
+        reason: `inna jazda ${conflictStart}–${conflictEnd}`,
+      };
+    }
+
+    return {
+      horse,
+      available: true,
+    };
+  }
+
+  const horseAvailability = horses
+    .map(getHorseAvailability)
+    .sort((a, b) => {
+      if (a.available !== b.available) {
+        return a.available ? -1 : 1;
+      }
+
+      return a.horse.name.localeCompare(b.horse.name, "pl");
+    });
+
+  const availableHorsesCount = horseAvailability.filter(
+    (item) => item.available
+  ).length;
+
   function normalizeDate(value: string): string {
     return value.replace(/Z$/, "").replace(/[+-]\d{2}:\d{2}$/, "");
   }
@@ -145,6 +572,10 @@ if (rideId === null) {
   }
 
   async function handleSave() {
+    if (!canManageCalendar) {
+      setError("Brak uprawnienia do zarządzania jazdami.");
+      return;
+    }
     if (
       !form.client_id ||
       !form.horse_id ||
@@ -198,6 +629,10 @@ if (rideId === null) {
   }
 
   async function handleDelete() {
+    if (!canManageCalendar) {
+      setError("Brak uprawnienia do usuwania jazd.");
+      return;
+    }
     if (rideId === null) {
       return;
     }
@@ -251,6 +686,14 @@ if (rideId === null) {
           <Stack spacing={2} sx={{ mt: 1 }}>
             {error && <Alert severity="error">{error}</Alert>}
 
+            {form.start_time &&
+              availableClientsCount === 0 && (
+                <Alert severity="warning">
+                  Brak dostępnych klientów w wybranym terminie.
+                  Sprawdź powody na liście poniżej.
+                </Alert>
+              )}
+
             <TextField
               select
               required
@@ -267,12 +710,29 @@ if (rideId === null) {
                 -- wybierz klienta --
               </MenuItem>
 
-              {clients.map((client) => (
-                <MenuItem key={client.id} value={client.id}>
-                  {client.first_name} {client.last_name}
-                </MenuItem>
-              ))}
+              {clientAvailability.map(
+                ({ client, available, reason }) => (
+                  <MenuItem
+                    key={client.id}
+                    value={client.id}
+                    disabled={!available}
+                  >
+                    {client.first_name} {client.last_name}
+                    {available
+                      ? " — dostępny"
+                      : ` — ${reason ?? "niedostępny"}`}
+                  </MenuItem>
+                )
+              )}
             </TextField>
+
+            {form.start_time &&
+              availableHorsesCount === 0 && (
+                <Alert severity="warning">
+                  Brak dostępnych koni w wybranym terminie.
+                  Sprawdź powody na liście poniżej.
+                </Alert>
+              )}
 
             <TextField
               select
@@ -290,12 +750,29 @@ if (rideId === null) {
                 -- wybierz konia --
               </MenuItem>
 
-              {horses.map((horse) => (
-                <MenuItem key={horse.id} value={horse.id}>
-                  {horse.name}
-                </MenuItem>
-              ))}
+              {horseAvailability.map(
+                ({ horse, available, reason }) => (
+                  <MenuItem
+                    key={horse.id}
+                    value={horse.id}
+                    disabled={!available}
+                  >
+                    {horse.name}
+                    {available
+                      ? " — dostępny"
+                      : ` — ${reason ?? "niedostępny"}`}
+                  </MenuItem>
+                )
+              )}
             </TextField>
+
+            {form.start_time &&
+              availableInstructorsCount === 0 && (
+                <Alert severity="warning">
+                  Brak dostępnych instruktorów w wybranym terminie.
+                  Sprawdź powody na liście poniżej.
+                </Alert>
+              )}
 
             <TextField
               select
@@ -313,15 +790,21 @@ if (rideId === null) {
                 -- wybierz instruktora --
               </MenuItem>
 
-              {instructors.map((instructor) => (
-                <MenuItem
-                  key={instructor.id}
-                  value={instructor.id}
-                >
-                  {instructor.first_name}{" "}
-                  {instructor.last_name}
-                </MenuItem>
-              ))}
+              {instructorAvailability.map(
+                ({ instructor, available, reason }) => (
+                  <MenuItem
+                    key={instructor.id}
+                    value={instructor.id}
+                    disabled={!available}
+                  >
+                    {instructor.first_name}{" "}
+                    {instructor.last_name}
+                    {available
+                      ? " — dostępny"
+                      : ` — ${reason ?? "niedostępny"}`}
+                  </MenuItem>
+                )
+              )}
             </TextField>
 
             <TextField
@@ -395,7 +878,7 @@ if (rideId === null) {
         }}
       >
         <div>
-          {isEditing && (
+          {isEditing && canManageCalendar && (
             <Button
               color="error"
               onClick={handleDelete}
@@ -414,17 +897,19 @@ if (rideId === null) {
             Anuluj
           </Button>
 
-          <Button
-            variant="contained"
-            onClick={handleSave}
-            disabled={saving || loadingData}
-          >
-            {saving
-              ? "Zapisywanie..."
-              : isEditing
-                ? "Zapisz zmiany"
-                : "Dodaj jazdę"}
-          </Button>
+          {canManageCalendar && (
+            <Button
+              variant="contained"
+              onClick={handleSave}
+              disabled={saving || loadingData}
+            >
+              {saving
+                ? "Zapisywanie..."
+                : isEditing
+                  ? "Zapisz zmiany"
+                  : "Dodaj jazdę"}
+            </Button>
+          )}
         </div>
       </DialogActions>
     </Dialog>

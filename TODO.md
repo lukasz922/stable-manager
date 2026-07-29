@@ -72,6 +72,7 @@ Szybka jazda
 Płatności
 Raporty
 Statystyki
+grafik wrzucić
 
 💡 Przyszłość
 

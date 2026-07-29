@@ -1,4 +1,4 @@
-from sqlalchemy import String, Text
+from sqlalchemy import Boolean, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -14,8 +14,22 @@ class Client(Base):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     riding_level: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    barcode: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
-    qr_code: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
-    rfid_uid: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
+    barcode: Mapped[str | None] = mapped_column(
+        String(100), unique=True, nullable=True
+    )
+    qr_code: Mapped[str | None] = mapped_column(
+        String(100), unique=True, nullable=True
+    )
+    rfid_uid: Mapped[str | None] = mapped_column(
+        String(100), unique=True, nullable=True
+    )
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+        index=True,
+    )

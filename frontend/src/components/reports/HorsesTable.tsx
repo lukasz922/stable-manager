@@ -1,91 +1,125 @@
 import { useEffect, useState } from "react";
-
 import {
   Alert,
+  Avatar,
   Box,
   CircularProgress,
+  LinearProgress,
   Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Stack,
   Typography,
 } from "@mui/material";
+import PetsRoundedIcon from "@mui/icons-material/PetsRounded";
 
 import {
   getHorsesReport,
   type HorseReport,
+  type ReportPeriod,
 } from "../../api/reports";
-
-import type { ReportPeriod } from "../../api/reports";
 
 type Props = {
   period: ReportPeriod;
 };
 
 export function HorsesTable({ period }: Props) {
-  const [horses, setHorses] = useState<HorseReport[]>([]);
+  const [items, setItems] = useState<HorseReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const load = async () => {
+    async function load() {
       try {
         setLoading(true);
         setError("");
-
-        const data = await getHorsesReport(period);
-        setHorses(data);
+        setItems(await getHorsesReport(period));
       } catch (err) {
-        console.error(err);
-        setError("Nie udało się pobrać raportu koni.");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Nie udało się pobrać danych raportu.",
+        );
       } finally {
         setLoading(false);
       }
-    };
+    }
 
     void load();
   }, [period]);
 
-  return (
-    <Box mt={5}>
-      <Typography variant="h5" mb={2}>
-        Najczęściej jeżdżące konie
-      </Typography>
+  const maxRides = Math.max(...items.map((item) => item.rides), 1);
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 2.5,
+        border: "1px solid",
+        borderColor: "divider",
+        borderRadius: 4,
+        minWidth: 0,
+      }}
+    >
+      <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 2 }}>
+        <PetsRoundedIcon color="primary" />
+        <Typography variant="h6" fontWeight={900}>
+          Najczęściej jeżdżące konie
+        </Typography>
+      </Stack>
+
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {loading ? (
-        <CircularProgress />
+        <Box sx={{ py: 6, display: "grid", placeItems: "center" }}>
+          <CircularProgress />
+        </Box>
+      ) : items.length === 0 ? (
+        <Box sx={{ py: 5, textAlign: "center" }}>
+          <Typography color="text.secondary">Brak jazd koni w tym okresie.</Typography>
+        </Box>
       ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Miejsce</TableCell>
-                <TableCell>Koń</TableCell>
-                <TableCell align="right">Liczba jazd</TableCell>
-              </TableRow>
-            </TableHead>
+        <Stack spacing={1.5}>
+          {items.map((item, index) => (
+            <Box key={item.horse_id}>
+              <Stack direction="row" spacing={1.25} alignItems="center">
+                <Avatar
+                  sx={{
+                    width: 34,
+                    height: 34,
+                    fontSize: 13,
+                    fontWeight: 900,
+                    bgcolor: index < 3 ? "primary.main" : "action.selected",
+                    color: index < 3 ? "primary.contrastText" : "text.primary",
+                  }}
+                >
+                  {index + 1}
+                </Avatar>
 
-            <TableBody>
-              {horses.map((horse, index) => (
-                <TableRow key={horse.horse_id}>
-                  <TableCell>{index + 1}</TableCell>
-                  <TableCell>{horse.horse_name}</TableCell>
-                  <TableCell align="right">{horse.rides}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Stack direction="row" justifyContent="space-between" spacing={1}>
+                    <Typography fontWeight={800} noWrap>
+                      {item.horse_name}
+                    </Typography>
+                    <Typography fontWeight={900}>
+                      {item.rides}
+                    </Typography>
+                  </Stack>
+
+                  <LinearProgress
+                    variant="determinate"
+                    value={(item.rides / maxRides) * 100}
+                    sx={{
+                      mt: 0.75,
+                      height: 7,
+                      borderRadius: 99,
+                      bgcolor: "action.hover",
+                    }}
+                  />
+                </Box>
+              </Stack>
+            </Box>
+          ))}
+        </Stack>
       )}
-    </Box>
+    </Paper>
   );
 }

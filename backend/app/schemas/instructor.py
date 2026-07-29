@@ -23,5 +23,10 @@ class InstructorUpdate(InstructorBase):
 class InstructorRead(InstructorBase):
     id: int
     code: str | None = None
+    user_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class InstructorUserLink(BaseModel):
+    user_id: int

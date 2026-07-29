@@ -2,12 +2,15 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { CssBaseline, ThemeProvider, createTheme } from "@mui/material";
+
 import "@fontsource/roboto/300.css";
 import "@fontsource/roboto/400.css";
 import "@fontsource/roboto/500.css";
 import "@fontsource/roboto/700.css";
+
 import "./index.css";
 import App from "./App";
+import { AuthProvider } from "./auth/AuthContext";
 
 const theme = createTheme({
   palette: {
@@ -16,7 +19,9 @@ const theme = createTheme({
     secondary: { main: "#c89b3c" },
     background: { default: "#f5f7fb" },
   },
-  shape: { borderRadius: 14 },
+  shape: {
+    borderRadius: 14,
+  },
 });
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -24,7 +29,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <App />
+        <AuthProvider>
+          <App />
+        </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>
   </React.StrictMode>

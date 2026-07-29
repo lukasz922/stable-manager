@@ -1,4 +1,4 @@
-const API = "http://localhost:8000";
+import { api } from "./client";
 
 export type Instructor = {
   id: number;
@@ -11,6 +11,7 @@ export type Instructor = {
   hourly_rate?: number | null;
   status: string;
   notes?: string | null;
+  user_id?: number | null;
 };
 
 export type InstructorCreate = {
@@ -25,59 +26,57 @@ export type InstructorCreate = {
 };
 
 export async function getInstructors(): Promise<Instructor[]> {
-  const response = await fetch(`${API}/instructors`);
-
-  if (!response.ok) {
-    throw new Error("Nie udało się pobrać instruktorów.");
-  }
-
-  return response.json();
+  const { data } = await api.get<Instructor[]>("/instructors");
+  return data;
 }
 
-
 export async function createInstructor(
-  data: InstructorCreate
+  payload: InstructorCreate
 ): Promise<Instructor> {
-  const response = await fetch(`${API}/instructors`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
+  const { data } = await api.post<Instructor>(
+    "/instructors",
+    payload
+  );
 
-  if (!response.ok) {
-    throw new Error("Nie udało się dodać instruktora.");
-  }
-
-  return response.json();
+  return data;
 }
 
 export async function updateInstructor(
-  id: number,
-  data: InstructorCreate
+  instructorId: number,
+  payload: InstructorCreate
 ): Promise<Instructor> {
-  const response = await fetch(`${API}/instructors/${id}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
+  const { data } = await api.put<Instructor>(
+    `/instructors/${instructorId}`,
+    payload
+  );
 
-  if (!response.ok) {
-    throw new Error("Nie udało się zaktualizować instruktora.");
-  }
-
-  return response.json();
+  return data;
 }
 
-export async function deleteInstructor(id: number): Promise<void> {
-  const response = await fetch(`${API}/instructors/${id}`, {
-    method: "DELETE",
-  });
+export async function deleteInstructor(
+  instructorId: number
+): Promise<void> {
+  await api.delete(`/instructors/${instructorId}`);
+}
 
-  if (!response.ok) {
-    throw new Error("Nie udało się usunąć instruktora.");
-  }
+export async function linkInstructorUser(
+  instructorId: number,
+  userId: number
+): Promise<Instructor> {
+  const { data } = await api.put<Instructor>(
+    `/instructors/${instructorId}/user`,
+    { user_id: userId }
+  );
+
+  return data;
+}
+
+export async function unlinkInstructorUser(
+  instructorId: number
+): Promise<Instructor> {
+  const { data } = await api.delete<Instructor>(
+    `/instructors/${instructorId}/user`
+  );
+
+  return data;
 }

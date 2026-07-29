@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Box,
   Button,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -9,17 +11,20 @@ import {
   FormControl,
   InputLabel,
   MenuItem,
+  Paper,
   Select,
   Stack,
   TextField,
+  Typography,
 } from "@mui/material";
+import DirectionsRunRoundedIcon from "@mui/icons-material/DirectionsRunRounded";
+import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
+import PetsRoundedIcon from "@mui/icons-material/PetsRounded";
+import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
 
 import type { PassSummary } from "../api/checkin";
 import { getHorses, type Horse } from "../api/horses";
-import {
-  getInstructors,
-  type Instructor,
-} from "../api/instructors";
+import { getInstructors, type Instructor } from "../api/instructors";
 
 type QuickRideDialogProps = {
   open: boolean;
@@ -43,20 +48,16 @@ export function QuickRideDialog({
 }: QuickRideDialogProps) {
   const [horses, setHorses] = useState<Horse[]>([]);
   const [instructors, setInstructors] = useState<Instructor[]>([]);
-
   const [passId, setPassId] = useState("");
   const [horseId, setHorseId] = useState("");
   const [instructorId, setInstructorId] = useState("");
   const [durationMinutes, setDurationMinutes] = useState(60);
-
   const [loading, setLoading] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!open) {
-      return;
-    }
+    if (!open) return;
 
     async function loadOptions() {
       try {
@@ -68,26 +69,22 @@ export function QuickRideDialog({
           getInstructors(),
         ]);
 
-     setHorses(horsesData);
-
+        setHorses(horsesData);
         setInstructors(
-          instructorsData.filter(
-            (instructor) => instructor.status === "active"
-          )
+          instructorsData.filter((instructor) => instructor.status === "active"),
         );
       } catch (err) {
-        const message =
+        setError(
           err instanceof Error
             ? err.message
-            : "Nie udało się pobrać danych formularza.";
-
-        setError(message);
+            : "Nie udało się pobrać danych formularza.",
+        );
       } finally {
         setLoadingOptions(false);
       }
     }
 
-    loadOptions();
+    void loadOptions();
   }, [open]);
 
   useEffect(() => {
@@ -99,6 +96,11 @@ export function QuickRideDialog({
       setError("");
     }
   }, [open]);
+
+  const selectedPass = useMemo(
+    () => passes.find((item) => item.id === Number(passId)),
+    [passes, passId],
+  );
 
   async function handleSubmit() {
     if (!passId || !horseId || !instructorId) {
@@ -122,12 +124,11 @@ export function QuickRideDialog({
         duration_minutes: durationMinutes,
       });
     } catch (err) {
-      const message =
+      setError(
         err instanceof Error
           ? err.message
-          : "Nie udało się utworzyć szybkiej jazdy.";
-
-      setError(message);
+          : "Nie udało się utworzyć szybkiej jazdy.",
+      );
     } finally {
       setLoading(false);
     }
@@ -138,12 +139,35 @@ export function QuickRideDialog({
       open={open}
       onClose={loading ? undefined : onClose}
       fullWidth
-      maxWidth="sm"
+      maxWidth="md"
+      PaperProps={{ sx: { borderRadius: 4 } }}
     >
-      <DialogTitle>Szybka jazda — {clientName}</DialogTitle>
+      <DialogTitle sx={{ fontWeight: 900 }}>
+        Szybka jazda
+      </DialogTitle>
 
       <DialogContent>
-        <Stack spacing={3} sx={{ mt: 1 }}>
+        <Stack spacing={2.5} sx={{ mt: 1 }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              bgcolor: "primary.50",
+              borderRadius: 3,
+              display: "flex",
+              alignItems: "center",
+              gap: 1.5,
+            }}
+          >
+            <PersonRoundedIcon color="primary" />
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                Klient
+              </Typography>
+              <Typography fontWeight={900}>{clientName}</Typography>
+            </Box>
+          </Paper>
+
           {error && <Alert severity="error">{error}</Alert>}
 
           {passes.length === 0 && (
@@ -152,81 +176,111 @@ export function QuickRideDialog({
             </Alert>
           )}
 
-          <FormControl fullWidth disabled={loadingOptions || loading}>
-            <InputLabel>Karnet</InputLabel>
-            <Select
-              value={passId}
-              label="Karnet"
-              onChange={(event) => setPassId(event.target.value)}
+          {loadingOptions ? (
+            <Box sx={{ py: 5, display: "grid", placeItems: "center" }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", md: "repeat(2, 1fr)" },
+                gap: 2,
+              }}
             >
-              {passes.map((clientPass) => (
-                <MenuItem key={clientPass.id} value={clientPass.id}>
-                  {clientPass.name} — pozostało:{" "}
-                  {clientPass.remaining_entries}, ważny do:{" "}
-                  {clientPass.valid_until}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+              <FormControl fullWidth disabled={loading}>
+                <InputLabel>Karnet</InputLabel>
+                <Select
+                  value={passId}
+                  label="Karnet"
+                  onChange={(event) => setPassId(event.target.value)}
+                >
+                  {passes.map((clientPass) => (
+                    <MenuItem key={clientPass.id} value={clientPass.id}>
+                      {clientPass.name} · {clientPass.remaining_entries} wejść
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
-          <FormControl fullWidth disabled={loadingOptions || loading}>
-            <InputLabel>Koń</InputLabel>
-            <Select
-              value={horseId}
-              label="Koń"
-              onChange={(event) => setHorseId(event.target.value)}
-            >
-              {horses.map((horse) => (
-                <MenuItem key={horse.id} value={horse.id}>
-                  {horse.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+              <TextField
+                label="Czas jazdy"
+                type="number"
+                value={durationMinutes}
+                onChange={(event) =>
+                  setDurationMinutes(Number(event.target.value))
+                }
+                inputProps={{ min: 1, step: 5 }}
+                disabled={loading}
+                helperText="Czas w minutach"
+                fullWidth
+              />
 
-          <FormControl fullWidth disabled={loadingOptions || loading}>
-            <InputLabel>Instruktor</InputLabel>
-            <Select
-              value={instructorId}
-              label="Instruktor"
-              onChange={(event) =>
-                setInstructorId(event.target.value)
-              }
-            >
-              {instructors.map((instructor) => (
-                <MenuItem key={instructor.id} value={instructor.id}>
-                  {instructor.first_name} {instructor.last_name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+              <FormControl fullWidth disabled={loading}>
+                <InputLabel>Koń</InputLabel>
+                <Select
+                  value={horseId}
+                  label="Koń"
+                  onChange={(event) => setHorseId(event.target.value)}
+                  startAdornment={<PetsRoundedIcon sx={{ mr: 1 }} color="action" />}
+                >
+                  {horses.map((horse) => (
+                    <MenuItem key={horse.id} value={horse.id}>
+                      {horse.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
-          <TextField
-            label="Czas jazdy w minutach"
-            type="number"
-            value={durationMinutes}
-            onChange={(event) =>
-              setDurationMinutes(Number(event.target.value))
-            }
-            inputProps={{ min: 1 }}
-            disabled={loading}
-            fullWidth
-          />
+              <FormControl fullWidth disabled={loading}>
+                <InputLabel>Instruktor</InputLabel>
+                <Select
+                  value={instructorId}
+                  label="Instruktor"
+                  onChange={(event) => setInstructorId(event.target.value)}
+                  startAdornment={<SchoolRoundedIcon sx={{ mr: 1 }} color="action" />}
+                >
+                  {instructors.map((instructor) => (
+                    <MenuItem key={instructor.id} value={instructor.id}>
+                      {instructor.first_name} {instructor.last_name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+          )}
+
+          {selectedPass && (
+            <Alert severity="info">
+              Karnet ważny do {selectedPass.valid_until}. Pozostało wejść:{" "}
+              {selectedPass.remaining_entries}.
+            </Alert>
+          )}
         </Stack>
       </DialogContent>
 
-      <DialogActions>
+      <DialogActions sx={{ px: 3, pb: 3 }}>
         <Button onClick={onClose} disabled={loading}>
           Anuluj
         </Button>
 
         <Button
           variant="contained"
-          onClick={handleSubmit}
+          startIcon={
+            loading ? (
+              <CircularProgress size={18} color="inherit" />
+            ) : (
+              <DirectionsRunRoundedIcon />
+            )
+          }
+          onClick={() => void handleSubmit()}
           disabled={
             loading ||
             loadingOptions ||
-            passes.length === 0
+            passes.length === 0 ||
+            !passId ||
+            !horseId ||
+            !instructorId
           }
         >
           {loading ? "Tworzenie..." : "Rozpocznij jazdę"}

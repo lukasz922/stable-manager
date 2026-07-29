@@ -1,15 +1,16 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    username: str
     password: str
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
+    username: str
     full_name: str
     password: str
+    role: str = "reception"
 
 
 class TokenResponse(BaseModel):
@@ -19,7 +20,7 @@ class TokenResponse(BaseModel):
 
 class UserResponse(BaseModel):
     id: int
-    email: str
+    username: str
     full_name: str
     role: str
     is_active: bool

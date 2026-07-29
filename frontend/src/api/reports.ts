@@ -1,11 +1,14 @@
-const API = "http://localhost:8000";
+import { api } from "./client";
 
 export type ReportPeriod = "today" | "week" | "month";
 
 export type ReportsSummary = {
-  rides_today: number;
-  rides_week: number;
-  rides_month: number;
+  period: ReportPeriod;
+  total_rides: number;
+  planned_rides: number;
+  checked_in_rides: number;
+  completed_rides: number;
+  cancelled_rides: number;
   active_clients: number;
   active_horses: number;
   active_instructors: number;
@@ -13,14 +16,15 @@ export type ReportsSummary = {
   expiring_passes: number;
 };
 
-export async function getReportsSummary(): Promise<ReportsSummary> {
-  const response = await fetch(`${API}/reports/summary`);
+export async function getReportsSummary(
+  period: ReportPeriod = "month",
+): Promise<ReportsSummary> {
+  const { data } = await api.get<ReportsSummary>(
+    "/reports/summary",
+    { params: { period } },
+  );
 
-  if (!response.ok) {
-    throw new Error("Nie udało się pobrać raportów.");
-  }
-
-  return response.json();
+  return data;
 }
 
 export type HorseReport = {
@@ -30,17 +34,14 @@ export type HorseReport = {
 };
 
 export async function getHorsesReport(
-  period: ReportPeriod = "month"
+  period: ReportPeriod = "month",
 ): Promise<HorseReport[]> {
-  const response = await fetch(
-    `${API}/reports/horses?period=${period}`
+  const { data } = await api.get<HorseReport[]>(
+    "/reports/horses",
+    { params: { period } },
   );
 
-  if (!response.ok) {
-    throw new Error("Nie udało się pobrać raportu koni.");
-  }
-
-  return response.json();
+  return data;
 }
 
 export type InstructorReport = {
@@ -50,17 +51,14 @@ export type InstructorReport = {
 };
 
 export async function getInstructorsReport(
-  period: ReportPeriod = "month"
+  period: ReportPeriod = "month",
 ): Promise<InstructorReport[]> {
-  const response = await fetch(
-    `${API}/reports/instructors?period=${period}`
+  const { data } = await api.get<InstructorReport[]>(
+    "/reports/instructors",
+    { params: { period } },
   );
 
-  if (!response.ok) {
-    throw new Error("Nie udało się pobrać raportu instruktorów.");
-  }
-
-  return response.json();
+  return data;
 }
 
 export type ClientReport = {
@@ -70,15 +68,12 @@ export type ClientReport = {
 };
 
 export async function getClientsReport(
-  period: ReportPeriod = "month"
+  period: ReportPeriod = "month",
 ): Promise<ClientReport[]> {
-  const response = await fetch(
-    `${API}/reports/clients?period=${period}`
+  const { data } = await api.get<ClientReport[]>(
+    "/reports/clients",
+    { params: { period } },
   );
 
-  if (!response.ok) {
-    throw new Error("Nie udało się pobrać raportu klientów.");
-  }
-
-  return response.json();
+  return data;
 }

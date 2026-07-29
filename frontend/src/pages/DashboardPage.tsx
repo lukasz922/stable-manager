@@ -1,15 +1,24 @@
 import { useEffect, useState } from "react";
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Card,
   CardContent,
   Chip,
-  Grid,
+  CircularProgress,
+  Divider,
   Snackbar,
+  Stack,
   Typography,
 } from "@mui/material";
+import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import GroupsRoundedIcon from "@mui/icons-material/GroupsRounded";
+import LoginRoundedIcon from "@mui/icons-material/LoginRounded";
+import PetsRoundedIcon from "@mui/icons-material/PetsRounded";
+import ScheduleRoundedIcon from "@mui/icons-material/ScheduleRounded";
 
 import { api } from "../api/client";
 import DashboardAlert from "../components/DashboardAlert";
@@ -27,6 +36,7 @@ type TodayRide = {
   status: string;
   client: string;
   horse: string;
+  instructor: string;
 };
 
 type DashboardStats = {
@@ -36,6 +46,7 @@ type DashboardStats = {
   checked_in_today: number;
   completed_today: number;
   planned_today: number;
+  cancelled_today: number;
   expiring_passes: number;
   rides_next_hour: number;
   today_rides: TodayRide[];
@@ -48,196 +59,453 @@ const initialStats: DashboardStats = {
   checked_in_today: 0,
   completed_today: 0,
   planned_today: 0,
+  cancelled_today: 0,
   expiring_passes: 0,
   rides_next_hour: 0,
   today_rides: [],
 };
 
 const statusMap = {
-  planned: { label: "Zaplanowana", color: "primary" as const },
-  checked_in: { label: "Odbity", color: "warning" as const },
-  completed: { label: "Odbyta", color: "success" as const },
-  cancelled: { label: "Anulowana", color: "error" as const },
+  planned: {
+    label: "Zaplanowana",
+    color: "primary" as const,
+  },
+  checked_in: {
+    label: "Klient obecny",
+    color: "warning" as const,
+  },
+  completed: {
+    label: "Zakończona",
+    color: "success" as const,
+  },
+  cancelled: {
+    label: "Anulowana",
+    color: "error" as const,
+  },
 };
 
 export function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats>(initialStats);
-  const [snackbar, setSnackbar] = useState<SnackbarState>({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const [stats, setStats] =
+    useState<DashboardStats>(initialStats);
+  const [loading, setLoading] = useState(true);
+  const [snackbar, setSnackbar] =
+    useState<SnackbarState>({
+      open: false,
+      message: "",
+      severity: "success",
+    });
 
-  async function loadStats() {
+  async function loadStats(showLoader = false) {
     try {
-      const response = await api.get<DashboardStats>("/dashboard/stats");
+      if (showLoader) {
+        setLoading(true);
+      }
+
+      const response = await api.get<DashboardStats>(
+        "/dashboard/stats",
+      );
       setStats(response.data);
     } catch (error) {
-      console.error("Nie udało się pobrać statystyk dashboardu:", error);
+      console.error(
+        "Nie udało się pobrać statystyk dashboardu:",
+        error,
+      );
+
+      setSnackbar({
+        open: true,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Nie udało się pobrać danych dashboardu.",
+        severity: "error",
+      });
+    } finally {
+      if (showLoader) {
+        setLoading(false);
+      }
     }
   }
 
-  async function updateRideStatus(rideId: number, newStatus: string) {
+  async function updateRideStatus(
+    rideId: number,
+    newStatus: string,
+  ) {
     try {
-      await api.patch(`/rides/${rideId}/status`, { status: newStatus });
+      await api.patch(`/rides/${rideId}/status`, {
+        status: newStatus,
+      });
+
       await loadStats();
 
       setSnackbar({
         open: true,
         message:
           newStatus === "checked_in"
-            ? "Jazda została odbita."
+            ? "Klient został oznaczony jako obecny."
             : "Jazda została zakończona.",
         severity: "success",
       });
     } catch (error) {
-      console.error("Nie udało się zmienić statusu jazdy:", error);
+      console.error(
+        "Nie udało się zmienić statusu jazdy:",
+        error,
+      );
+
       setSnackbar({
         open: true,
-        message: "Nie udało się zmienić statusu jazdy.",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Nie udało się zmienić statusu jazdy.",
         severity: "error",
       });
     }
   }
 
   useEffect(() => {
-    loadStats();
-    const interval = window.setInterval(loadStats, 30_000);
+    void loadStats(true);
+
+    const interval = window.setInterval(
+      () => void loadStats(),
+      30_000,
+    );
+
     return () => window.clearInterval(interval);
   }, []);
 
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          minHeight: 320,
+          display: "grid",
+          placeItems: "center",
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  const cards = [
+    {
+      title: "Klienci",
+      value: stats.clients_count,
+      accent: "#5b21b6",
+      icon: <GroupsRoundedIcon />,
+    },
+    {
+      title: "Aktywne konie",
+      value: stats.horses_count,
+      accent: "#15803d",
+      icon: <PetsRoundedIcon />,
+    },
+    {
+      title: "Jazdy dzisiaj",
+      value: stats.rides_today,
+      accent: "#c2410c",
+      icon: <CalendarMonthRoundedIcon />,
+    },
+    {
+      title: "Klient obecny",
+      value: stats.checked_in_today,
+      accent: "#a21caf",
+      icon: <LoginRoundedIcon />,
+    },
+    {
+      title: "Zakończone",
+      value: stats.completed_today,
+      accent: "#15803d",
+      icon: <CheckCircleRoundedIcon />,
+    },
+    {
+      title: "Zaplanowane",
+      value: stats.planned_today,
+      accent: "#0369a1",
+      icon: <ScheduleRoundedIcon />,
+    },
+  ];
+
   return (
     <>
-      <Typography variant="h4" fontWeight={800} gutterBottom>
-        Dashboard
-      </Typography>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" fontWeight={800}>
+          Dashboard
+        </Typography>
 
-      <Typography color="text.secondary" sx={{ mb: 3 }}>
-        Podsumowanie pracy stajni na dziś.
-      </Typography>
+        <Typography color="text.secondary" sx={{ mt: 0.75 }}>
+          Podsumowanie pracy stajni na dziś.
+        </Typography>
+      </Box>
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} sm={6} md={4}>
-          <DashboardCard icon="👥" title="Klienci" value={stats.clients_count} color="#1976d2" />
-        </Grid>
-        <Grid item xs={12} sm={6} md={4}>
-          <DashboardCard icon="🐴" title="Konie" value={stats.horses_count} color="#2e7d32" />
-        </Grid>
-        <Grid item xs={12} sm={6} md={4}>
-          <DashboardCard icon="📅" title="Jazdy dzisiaj" value={stats.rides_today} color="#ed6c02" />
-        </Grid>
-        <Grid item xs={12} sm={6} md={4}>
-          <DashboardCard icon="📡" title="Odbicia RFID" value={stats.checked_in_today} color="#9c27b0" />
-        </Grid>
-        <Grid item xs={12} sm={6} md={4}>
-          <DashboardCard icon="🟢" title="Odbyte" value={stats.completed_today} color="#2e7d32" />
-        </Grid>
-        <Grid item xs={12} sm={6} md={4}>
-          <DashboardCard icon="🔵" title="Zaplanowane" value={stats.planned_today} color="#0288d1" />
-        </Grid>
-      </Grid>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "1fr",
+            sm: "repeat(2, minmax(0, 1fr))",
+            md: "repeat(3, minmax(0, 1fr))",
+            xl: "repeat(6, minmax(0, 1fr))",
+          },
+          gap: 2,
+        }}
+      >
+        {cards.map((card) => (
+          <DashboardCard
+            key={card.title}
+            icon={card.icon}
+            title={card.title}
+            value={card.value}
+            accent={card.accent}
+          />
+        ))}
+      </Box>
 
       <DashboardAlert title="Wymaga uwagi">
-        <Typography sx={{ mt: 2 }}>
-          🎫 Karnety kończące się: <b>{stats.expiring_passes}</b>
-        </Typography>
-        <Typography sx={{ mt: 1 }}>
-          📅 Jazdy rozpoczynające się w ciągu godziny: <b>{stats.rides_next_hour}</b>
-        </Typography>
-        <Typography sx={{ mt: 1 }}>
-          📡 Odbicia RFID dzisiaj: <b>{stats.checked_in_today}</b>
-        </Typography>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: {
+              xs: "1fr",
+              md: "repeat(3, minmax(0, 1fr))",
+            },
+            gap: 2,
+          }}
+        >
+          {[
+            {
+              label: "Karnety kończące się",
+              value: stats.expiring_passes,
+            },
+            {
+              label: "Jazdy w ciągu godziny",
+              value: stats.rides_next_hour,
+            },
+            {
+              label: "Anulowane dzisiaj",
+              value: stats.cancelled_today,
+            },
+          ].map((item) => (
+            <Box
+              key={item.label}
+              sx={{
+                p: 2,
+                borderRadius: 3,
+                bgcolor: "rgba(255,255,255,0.72)",
+                border: "1px solid",
+                borderColor: "divider",
+              }}
+            >
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                fontWeight={700}
+              >
+                {item.label}
+              </Typography>
+
+              <Typography
+                variant="h5"
+                fontWeight={800}
+                sx={{ mt: 0.5 }}
+              >
+                {item.value}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
       </DashboardAlert>
 
-      <Card sx={{ mt: 3, borderRadius: 3 }}>
-        <CardContent>
-          <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
-            Dzisiejsze jazdy
-          </Typography>
+      <Card
+        elevation={0}
+        sx={{
+          mt: 3,
+          border: "1px solid",
+          borderColor: "divider",
+          borderRadius: 4,
+        }}
+      >
+        <CardContent sx={{ p: 0 }}>
+          <Box sx={{ p: 3 }}>
+            <Typography variant="h6" fontWeight={800}>
+              Dzisiejsze jazdy
+            </Typography>
+
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: 0.5 }}
+            >
+              Lista aktualizuje się automatycznie co 30 sekund.
+            </Typography>
+          </Box>
+
+          <Divider />
 
           {stats.today_rides.length === 0 ? (
-            <Typography color="text.secondary">
-              Brak zaplanowanych jazd na dzisiaj.
-            </Typography>
+            <Box sx={{ p: 4, textAlign: "center" }}>
+              <Typography color="text.secondary">
+                Brak jazd na dzisiaj.
+              </Typography>
+            </Box>
           ) : (
-            stats.today_rides.map((ride) => (
-              <Box
-                key={ride.id}
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  py: 1.5,
-                  borderBottom: "1px solid",
-                  borderColor: "divider",
-                }}
-              >
-                <Box>
-                  <Typography fontWeight={700}>
-                    {new Date(ride.start_time).toLocaleTimeString("pl-PL", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </Typography>
-                  <Typography>{ride.client}</Typography>
-                </Box>
+            <Stack divider={<Divider />}>
+              {stats.today_rides.map((ride) => {
+                const status =
+                  statusMap[
+                    ride.status as keyof typeof statusMap
+                  ];
 
-                <Box sx={{ textAlign: "right" }}>
-                  <Typography fontWeight={600}>🐴 {ride.horse}</Typography>
-
+                return (
                   <Box
+                    key={ride.id}
                     sx={{
-                      mt: 0.75,
-                      display: "flex",
-                      justifyContent: "flex-end",
+                      px: 3,
+                      py: 2,
+                      display: "grid",
+                      gridTemplateColumns: {
+                        xs: "1fr",
+                        md: "90px minmax(180px, 1fr) minmax(160px, 1fr) auto",
+                      },
                       alignItems: "center",
-                      gap: 1,
+                      gap: 2,
                     }}
                   >
-                    <Chip
-                      label={statusMap[ride.status as keyof typeof statusMap]?.label ?? ride.status}
-                      color={statusMap[ride.status as keyof typeof statusMap]?.color ?? "default"}
-                      size="small"
-                    />
+                    <Typography
+                      variant="h6"
+                      fontWeight={800}
+                    >
+                      {new Date(
+                        ride.start_time,
+                      ).toLocaleTimeString("pl-PL", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </Typography>
 
-                    {ride.status === "planned" && (
-                      <Button
-                        variant="contained"
-                        size="small"
-                        onClick={() => updateRideStatus(ride.id, "checked_in")}
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1.5,
+                      }}
+                    >
+                      <Avatar
+                        sx={{
+                          width: 38,
+                          height: 38,
+                          fontSize: 15,
+                          fontWeight: 800,
+                        }}
                       >
-                        📡 Odbij
-                      </Button>
-                    )}
+                        {ride.client
+                          .split(" ")
+                          .map((part) => part[0])
+                          .join("")
+                          .slice(0, 2)}
+                      </Avatar>
 
-                    {ride.status === "checked_in" && (
-                      <Button
-                        variant="contained"
-                        color="success"
+                      <Box>
+                        <Typography fontWeight={800}>
+                          {ride.client}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                        >
+                          Instruktor: {ride.instructor}
+                        </Typography>
+                      </Box>
+                    </Box>
+
+                    <Typography fontWeight={700}>
+                      Koń: {ride.horse}
+                    </Typography>
+
+                    <Box
+                      sx={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        justifyContent: {
+                          xs: "flex-start",
+                          md: "flex-end",
+                        },
+                        gap: 1,
+                      }}
+                    >
+                      <Chip
+                        label={status?.label ?? ride.status}
+                        color={status?.color ?? "default"}
                         size="small"
-                        onClick={() => updateRideStatus(ride.id, "completed")}
-                      >
-                        ✔ Zakończ
-                      </Button>
-                    )}
+                      />
+
+                      {ride.status === "planned" && (
+                        <Button
+                          variant="contained"
+                          size="small"
+                          startIcon={<LoginRoundedIcon />}
+                          onClick={() =>
+                            updateRideStatus(
+                              ride.id,
+                              "checked_in",
+                            )
+                          }
+                        >
+                          Odbij
+                        </Button>
+                      )}
+
+                      {ride.status === "checked_in" && (
+                        <Button
+                          variant="contained"
+                          color="success"
+                          size="small"
+                          startIcon={
+                            <CheckCircleRoundedIcon />
+                          }
+                          onClick={() =>
+                            updateRideStatus(
+                              ride.id,
+                              "completed",
+                            )
+                          }
+                        >
+                          Zakończ
+                        </Button>
+                      )}
+                    </Box>
                   </Box>
-                </Box>
-              </Box>
-            ))
+                );
+              })}
+            </Stack>
           )}
         </CardContent>
       </Card>
 
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={3000}
-        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        autoHideDuration={3500}
+        onClose={() =>
+          setSnackbar((previous) => ({
+            ...previous,
+            open: false,
+          }))
+        }
+        anchorOrigin={{
+          vertical: "bottom",
+          horizontal: "right",
+        }}
       >
         <Alert
           severity={snackbar.severity}
           variant="filled"
-          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+          onClose={() =>
+            setSnackbar((previous) => ({
+              ...previous,
+              open: false,
+            }))
+          }
         >
           {snackbar.message}
         </Alert>

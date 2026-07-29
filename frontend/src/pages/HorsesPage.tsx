@@ -1,11 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  DialogActions,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
   Alert,
+  Avatar,
   Box,
   Button,
   Card,
@@ -13,363 +9,952 @@ import {
   Chip,
   CircularProgress,
   Dialog,
+  DialogActions,
   DialogContent,
   DialogTitle,
-  TextField,
-  Typography,
+  Divider,
+  FormControl,
+  IconButton,
+  InputAdornment,
+  InputLabel,
+  Menu,
+  MenuItem,
+  Paper,
+  Select,
   Snackbar,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
 } from "@mui/material";
 
-import type { Horse } from "../api/horses";
-import { createHorse, deleteHorse, getHorses, updateHorse } from "../api/horses";
+import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
+import HeightRoundedIcon from "@mui/icons-material/HeightRounded";
+import MoreVertRoundedIcon from "@mui/icons-material/MoreVertRounded";
+import PetsRoundedIcon from "@mui/icons-material/PetsRounded";
+import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
+import ScaleRoundedIcon from "@mui/icons-material/ScaleRounded";
+import ScheduleRoundedIcon from "@mui/icons-material/ScheduleRounded";
+
+import {
+  createHorse,
+  deleteHorse,
+  getHorses,
+  updateHorse,
+  type Horse,
+  type HorseCreate,
+} from "../api/horses";
+
+type HorseForm = {
+  name: string;
+  breed: string;
+  gender: string;
+  color: string;
+  height_cm: string;
+  max_rider_weight: string;
+  max_lessons_per_day: string;
+  status: string;
+  notes: string;
+};
+
+type StatusFilter =
+  | "all"
+  | "available"
+  | "resting"
+  | "unavailable";
+
+type MessageState = {
+  open: boolean;
+  text: string;
+  severity: "success" | "error";
+};
+
+const emptyForm: HorseForm = {
+  name: "",
+  breed: "",
+  gender: "",
+  color: "",
+  height_cm: "",
+  max_rider_weight: "",
+  max_lessons_per_day: "5",
+  status: "available",
+  notes: "",
+};
+
+const statusMap = {
+  available: {
+    label: "Dostępny",
+    color: "success" as const,
+  },
+  resting: {
+    label: "Odpoczywa",
+    color: "warning" as const,
+  },
+  unavailable: {
+    label: "Niedostępny",
+    color: "error" as const,
+  },
+};
+
+function statusInfo(status: string) {
+  return (
+    statusMap[status as keyof typeof statusMap] ??
+    statusMap.unavailable
+  );
+}
+
+function toPayload(form: HorseForm): HorseCreate {
+  return {
+    name: form.name.trim(),
+    breed: form.breed.trim() || undefined,
+    gender: form.gender || undefined,
+    color: form.color.trim() || undefined,
+    height_cm: form.height_cm
+      ? Number(form.height_cm)
+      : undefined,
+    max_rider_weight: form.max_rider_weight
+      ? Number(form.max_rider_weight)
+      : undefined,
+    max_lessons_per_day:
+      Number(form.max_lessons_per_day) || 5,
+    status: form.status,
+    notes: form.notes.trim() || undefined,
+  };
+}
 
 export function HorsesPage() {
   const [horses, setHorses] = useState<Horse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(false);
-  const [error, setError] = useState("");
-
-
-  const [editingHorseId, setEditingHorseId] = useState<number | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
-  const [successMessage, setSuccessMessage] = useState(""); 
-  const [form, setForm] = useState({
-    name: "",
-    breed: "",
-    gender: "",
-    color: "",
-    height_cm: "",
-    max_rider_weight: "",
-    max_lessons_per_day: "5",
-    status: "available",
-    notes: "",
-  });
+  const [statusFilter, setStatusFilter] =
+    useState<StatusFilter>("all");
 
-  useEffect(() => {
-    loadHorses();
-  }, []);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingHorse, setEditingHorse] =
+    useState<Horse | null>(null);
+  const [form, setForm] = useState<HorseForm>(emptyForm);
+
+  const [menuAnchor, setMenuAnchor] =
+    useState<HTMLElement | null>(null);
+  const [menuHorse, setMenuHorse] =
+    useState<Horse | null>(null);
+
+  const [message, setMessage] = useState<MessageState>({
+    open: false,
+    text: "",
+    severity: "success",
+  });
 
   async function loadHorses() {
     try {
+      setLoading(true);
       const data = await getHorses();
       setHorses(data);
+    } catch (error) {
+      setMessage({
+        open: true,
+        text:
+          error instanceof Error
+            ? error.message
+            : "Nie udało się pobrać listy koni.",
+        severity: "error",
+      });
     } finally {
       setLoading(false);
     }
   }
 
-async function handleCreateHorse() {
-  if (!form.name.trim()) {
-    setError("Imię konia jest wymagane.");
-    return;
+  useEffect(() => {
+    void loadHorses();
+  }, []);
+
+  const filteredHorses = useMemo(() => {
+    const phrase = search.trim().toLowerCase();
+
+    return horses.filter((horse) => {
+      const matchesStatus =
+        statusFilter === "all" ||
+        horse.status === statusFilter;
+
+      const matchesSearch =
+        !phrase ||
+        [
+          horse.name,
+          horse.code,
+          horse.breed,
+          horse.gender,
+          horse.color,
+        ]
+          .filter(Boolean)
+          .some((value) =>
+            String(value).toLowerCase().includes(phrase),
+          );
+
+      return matchesStatus && matchesSearch;
+    });
+  }, [horses, search, statusFilter]);
+
+  const availableCount = horses.filter(
+    (horse) => horse.status === "available",
+  ).length;
+  const restingCount = horses.filter(
+    (horse) => horse.status === "resting",
+  ).length;
+  const unavailableCount = horses.filter(
+    (horse) => horse.status === "unavailable",
+  ).length;
+
+  function openCreateDialog() {
+    setEditingHorse(null);
+    setForm(emptyForm);
+    setFormOpen(true);
   }
 
-  setError("");
+  function openEditDialog(horse: Horse) {
+    setEditingHorse(horse);
+    setForm({
+      name: horse.name ?? "",
+      breed: horse.breed ?? "",
+      gender: horse.gender ?? "",
+      color: horse.color ?? "",
+      height_cm: horse.height_cm
+        ? String(horse.height_cm)
+        : "",
+      max_rider_weight: horse.max_rider_weight
+        ? String(horse.max_rider_weight)
+        : "",
+      max_lessons_per_day: String(
+        horse.max_lessons_per_day ?? 5,
+      ),
+      status: horse.status ?? "available",
+      notes: horse.notes ?? "",
+    });
+    setFormOpen(true);
+    closeMenu();
+  }
 
-const payload = {
-  name: form.name,
-  breed: form.breed || undefined,
-  gender: form.gender || undefined,
-  color: form.color || undefined,
-  height_cm: form.height_cm ? Number(form.height_cm) : undefined,
-  max_rider_weight: form.max_rider_weight
-    ? Number(form.max_rider_weight)
-    : undefined,
-  max_lessons_per_day: Number(form.max_lessons_per_day),
-  status: form.status,
-  notes: form.notes || undefined,
-};
+  function openMenu(
+    event: React.MouseEvent<HTMLElement>,
+    horse: Horse,
+  ) {
+    setMenuAnchor(event.currentTarget);
+    setMenuHorse(horse);
+  }
 
-if (isEditing && editingHorseId !== null) {
-  await updateHorse(editingHorseId, payload);
-} else {
-  await createHorse(payload);
-}
+  function closeMenu() {
+    setMenuAnchor(null);
+    setMenuHorse(null);
+  }
 
-  setOpen(false);
-setIsEditing(false);
-setEditingHorseId(null);
-  setForm({
-    name: "",
-    breed: "",
-    gender: "",
-    color: "",
-    height_cm: "",
-    max_rider_weight: "",
-    max_lessons_per_day: "5",
-    status: "available",
-    notes: "",
-  });
+  async function saveHorse() {
+    if (!form.name.trim()) {
+      setMessage({
+        open: true,
+        text: "Imię konia jest wymagane.",
+        severity: "error",
+      });
+      return;
+    }
 
- await loadHorses();
+    if (Number(form.max_lessons_per_day) < 1) {
+      setMessage({
+        open: true,
+        text: "Limit jazd dziennie musi wynosić co najmniej 1.",
+        severity: "error",
+      });
+      return;
+    }
 
-setSuccessMessage(
-  isEditing ? "Koń został zaktualizowany." : "Koń został dodany."
-);
-}
+    try {
+      setSaving(true);
+      const payload = toPayload(form);
 
-async function handleDeleteHorse(horse: Horse) {
-  const confirmed = window.confirm(
-    `Czy na pewno chcesz usunąć konia "${horse.name}"?`
-  );
+      if (editingHorse) {
+        await updateHorse(editingHorse.id, payload);
+      } else {
+        await createHorse(payload);
+      }
 
-  if (!confirmed) return;
+      setFormOpen(false);
+      setEditingHorse(null);
+      setForm(emptyForm);
+      await loadHorses();
 
-  await deleteHorse(horse.id);
-  await loadHorses();
+      setMessage({
+        open: true,
+        text: editingHorse
+          ? "Dane konia zostały zapisane."
+          : "Koń został dodany.",
+        severity: "success",
+      });
+    } catch (error) {
+      setMessage({
+        open: true,
+        text:
+          error instanceof Error
+            ? error.message
+            : "Nie udało się zapisać konia.",
+        severity: "error",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
 
-  setSuccessMessage("Koń został usunięty.");
-}  
-function handleEditHorse(horse: Horse) {
-  setEditingHorseId(horse.id);
-  setIsEditing(true);
+  async function removeHorse(horse: Horse) {
+    closeMenu();
 
-  setForm({
-    name: horse.name || "",
-    breed: horse.breed || "",
-    gender: horse.gender || "",
-    color: horse.color || "",
-    height_cm: horse.height_cm ? String(horse.height_cm) : "",
-    max_rider_weight: horse.max_rider_weight
-      ? String(horse.max_rider_weight)
-      : "",
-    max_lessons_per_day: String(horse.max_lessons_per_day || 5),
-    status: horse.status || "available",
-    notes: horse.notes || "",
-  });
-
-  setError("");
-  setOpen(true);
-}
-
-const filteredHorses = horses.filter((horse) => {
-  const phrase = search.toLowerCase();
-
-  return (
-    horse.name.toLowerCase().includes(phrase) ||
-    (horse.code || "").toLowerCase().includes(phrase) ||
-    (horse.breed || "").toLowerCase().includes(phrase)
-  );
-});
-
-if (loading) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", mt: 5 }}>
-        <CircularProgress />
-      </Box>
+    const confirmed = window.confirm(
+      `Czy na pewno chcesz usunąć konia „${horse.name}”?`,
     );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await deleteHorse(horse.id);
+      await loadHorses();
+
+      setMessage({
+        open: true,
+        text: "Koń został usunięty.",
+        severity: "success",
+      });
+    } catch (error) {
+      setMessage({
+        open: true,
+        text:
+          error instanceof Error
+            ? error.message
+            : "Nie udało się usunąć konia.",
+        severity: "error",
+      });
+    }
   }
 
   return (
-    <Box>
-      <Box sx={{ display: "flex", justifyContent: "space-between", mb: 3 }}>
+    <Box sx={{ pb: 4 }}>
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        justifyContent="space-between"
+        alignItems={{ xs: "stretch", md: "center" }}
+        spacing={2}
+        sx={{ mb: 3 }}
+      >
         <Box>
-          <Typography variant="h4" fontWeight={800} gutterBottom>
-            🐴 Konie
+          <Typography variant="h4" fontWeight={800}>
+            Konie
           </Typography>
-          <Typography color="text.secondary">
-            Lista wszystkich koni w stajni.
+          <Typography
+            color="text.secondary"
+            sx={{ mt: 0.75 }}
+          >
+            Dostępność, limity pracy i podstawowe dane koni.
           </Typography>
         </Box>
 
-        <Button variant="contained" onClick={() => setOpen(true)}>
-          + Dodaj konia
+        <Button
+          variant="contained"
+          startIcon={<AddRoundedIcon />}
+          onClick={openCreateDialog}
+          sx={{
+            borderRadius: 2.5,
+            textTransform: "none",
+            fontWeight: 800,
+          }}
+        >
+          Dodaj konia
         </Button>
+      </Stack>
+
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "1fr",
+            sm: "repeat(2, minmax(0, 1fr))",
+            lg: "repeat(4, minmax(0, 1fr))",
+          },
+          gap: 2,
+          mb: 3,
+        }}
+      >
+        {[
+          {
+            label: "Wszystkie",
+            value: horses.length,
+            filter: "all" as const,
+          },
+          {
+            label: "Dostępne",
+            value: availableCount,
+            filter: "available" as const,
+          },
+          {
+            label: "Odpoczywają",
+            value: restingCount,
+            filter: "resting" as const,
+          },
+          {
+            label: "Niedostępne",
+            value: unavailableCount,
+            filter: "unavailable" as const,
+          },
+        ].map((item) => (
+          <Card
+            key={item.filter}
+            elevation={0}
+            onClick={() => setStatusFilter(item.filter)}
+            sx={{
+              cursor: "pointer",
+              border: "1px solid",
+              borderColor:
+                statusFilter === item.filter
+                  ? "primary.main"
+                  : "divider",
+              borderRadius: 4,
+              transition:
+                "transform 180ms ease, box-shadow 180ms ease",
+              "&:hover": {
+                transform: "translateY(-2px)",
+                boxShadow:
+                  "0 12px 28px rgba(15,23,42,0.07)",
+              },
+            }}
+          >
+            <CardContent
+              sx={{
+                p: 2.5,
+                "&:last-child": { pb: 2.5 },
+              }}
+            >
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                fontWeight={700}
+              >
+                {item.label}
+              </Typography>
+              <Typography variant="h3" fontWeight={800}>
+                {item.value}
+              </Typography>
+            </CardContent>
+          </Card>
+        ))}
       </Box>
 
-<TextField
-  label="🔍 Szukaj konia"
-  placeholder="Wpisz imię, kod lub rasę..."
-  fullWidth
-  sx={{ mb: 3 }}
-  value={search}
-  onChange={(e) => setSearch(e.target.value)}
-/>
+      <Paper
+        elevation={0}
+        sx={{
+          p: 2,
+          mb: 2,
+          border: "1px solid",
+          borderColor: "divider",
+          borderRadius: 4,
+        }}
+      >
+        <TextField
+          fullWidth
+          placeholder="Szukaj po imieniu, kodzie, rasie lub maści"
+          value={search}
+          onChange={(event) =>
+            setSearch(event.target.value)
+          }
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchRoundedIcon color="action" />
+              </InputAdornment>
+            ),
+          }}
+        />
+      </Paper>
 
-      {horses.length === 0 ? (
-        <Typography>Brak koni w bazie.</Typography>
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        sx={{ mb: 2 }}
+      >
+        Wyświetlono {filteredHorses.length} z {horses.length} koni
+      </Typography>
+
+      {loading ? (
+        <Box
+          sx={{
+            py: 8,
+            display: "grid",
+            placeItems: "center",
+          }}
+        >
+          <CircularProgress />
+        </Box>
+      ) : filteredHorses.length === 0 ? (
+        <Paper
+          elevation={0}
+          sx={{
+            py: 8,
+            px: 2,
+            textAlign: "center",
+            border: "1px solid",
+            borderColor: "divider",
+            borderRadius: 4,
+          }}
+        >
+          <PetsRoundedIcon
+            sx={{
+              fontSize: 56,
+              color: "text.disabled",
+              mb: 1,
+            }}
+          />
+          <Typography fontWeight={800}>
+            Nie znaleziono koni
+          </Typography>
+          <Typography color="text.secondary">
+            Zmień wyszukiwane hasło lub wybrany status.
+          </Typography>
+        </Paper>
       ) : (
         <Box
           sx={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+            gridTemplateColumns: {
+              xs: "1fr",
+              md: "repeat(2, minmax(0, 1fr))",
+              xl: "repeat(3, minmax(0, 1fr))",
+            },
             gap: 2,
           }}
         >
-         {filteredHorses.map((horse) => (
-            <Card key={horse.id} elevation={0} sx={{ border: "1px solid #e5e7eb" }}>
-              <CardContent>
-                <Typography variant="overline">{horse.code}</Typography>
+          {filteredHorses.map((horse) => {
+            const status = statusInfo(horse.status);
 
-                <Typography variant="h5" fontWeight={700}>
-                  {horse.name}
-                </Typography>
+            return (
+              <Card
+                key={horse.id}
+                elevation={0}
+                sx={{
+                  height: "100%",
+                  border: "1px solid",
+                  borderColor: "divider",
+                  borderRadius: 4,
+                  transition:
+                    "transform 180ms ease, box-shadow 180ms ease",
+                  "&:hover": {
+                    transform: "translateY(-2px)",
+                    boxShadow:
+                      "0 14px 30px rgba(15,23,42,0.07)",
+                  },
+                }}
+              >
+                <CardContent
+                  sx={{
+                    p: 2.5,
+                    "&:last-child": { pb: 2.5 },
+                  }}
+                >
+                  <Stack
+                    direction="row"
+                    justifyContent="space-between"
+                    alignItems="flex-start"
+                    spacing={2}
+                  >
+                    <Stack
+                      direction="row"
+                      spacing={1.5}
+                      alignItems="center"
+                      sx={{ minWidth: 0 }}
+                    >
+                      <Avatar
+                        sx={{
+                          width: 50,
+                          height: 50,
+                          bgcolor: "primary.main",
+                        }}
+                      >
+                        <PetsRoundedIcon />
+                      </Avatar>
 
-                <Typography>Rasa: {horse.breed || "-"}</Typography>
-                <Typography>Płeć: {horse.gender || "-"}</Typography>
-                <Typography>Maść: {horse.color || "-"}</Typography>
-                <Typography>Limit jazd: {horse.max_lessons_per_day}</Typography>
-<Chip
-  sx={{ mt: 2 }}
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography
+                          variant="h6"
+                          fontWeight={800}
+                          noWrap
+                        >
+                          {horse.name}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                        >
+                          {horse.code || "Kod zostanie nadany"}
+                        </Typography>
+                      </Box>
+                    </Stack>
 
-  color={
-    horse.status === "available"
-      ? "success"
-      : horse.status === "resting"
-      ? "warning"
-      : "error"
-  }
-  label={
-    horse.status === "available"
-      ? "🟢 Dostępny"
-      : horse.status === "resting"
-      ? "🟡 Odpoczywa"
-      : "🔴 Niedostępny"
-  }
-/>
-   
-<Box sx={{ mt: 2 }}>
-  <Button
-    variant="outlined"
-    size="small"
-    onClick={() => handleEditHorse(horse)}
-    sx={{ mr: 1 }}
-  >
-    Edytuj
-  </Button>
+                    <Tooltip title="Więcej akcji">
+                      <IconButton
+                        onClick={(event) =>
+                          openMenu(event, horse)
+                        }
+                      >
+                        <MoreVertRoundedIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
 
- <Button
-    color="error"
-    variant="outlined"
-    size="small"
-    onClick={() => handleDeleteHorse(horse)}
-  >
-    Usuń
-  </Button>
-</Box>
-           
-</CardContent>
-            </Card>
-          ))}
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ mt: 2 }}
+                  >
+                    <Chip
+                      label={status.label}
+                      color={status.color}
+                      size="small"
+                    />
+                    {horse.breed && (
+                      <Chip
+                        label={horse.breed}
+                        variant="outlined"
+                        size="small"
+                      />
+                    )}
+                  </Stack>
+
+                  <Divider sx={{ my: 2 }} />
+
+                  <Stack spacing={1.25}>
+                    <Stack direction="row" spacing={1.25}>
+                      <ScheduleRoundedIcon
+                        fontSize="small"
+                        color="action"
+                      />
+                      <Typography variant="body2">
+                        Maks. {horse.max_lessons_per_day} jazd dziennie
+                      </Typography>
+                    </Stack>
+
+                    <Stack direction="row" spacing={1.25}>
+                      <HeightRoundedIcon
+                        fontSize="small"
+                        color="action"
+                      />
+                      <Typography
+                        variant="body2"
+                        color={
+                          horse.height_cm
+                            ? "text.primary"
+                            : "text.secondary"
+                        }
+                      >
+                        {horse.height_cm
+                          ? `${horse.height_cm} cm`
+                          : "Brak danych o wysokości"}
+                      </Typography>
+                    </Stack>
+
+                    <Stack direction="row" spacing={1.25}>
+                      <ScaleRoundedIcon
+                        fontSize="small"
+                        color="action"
+                      />
+                      <Typography
+                        variant="body2"
+                        color={
+                          horse.max_rider_weight
+                            ? "text.primary"
+                            : "text.secondary"
+                        }
+                      >
+                        {horse.max_rider_weight
+                          ? `Jeździec do ${horse.max_rider_weight} kg`
+                          : "Brak limitu wagi"}
+                      </Typography>
+                    </Stack>
+                  </Stack>
+
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    startIcon={<EditRoundedIcon />}
+                    onClick={() => openEditDialog(horse)}
+                    sx={{ mt: 2.5 }}
+                  >
+                    Edytuj
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
         </Box>
       )}
 
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Dodaj konia</DialogTitle>
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={closeMenu}
+      >
+        <MenuItem
+          onClick={() => {
+            if (menuHorse) {
+              openEditDialog(menuHorse);
+            }
+          }}
+        >
+          <EditRoundedIcon
+            fontSize="small"
+            sx={{ mr: 1.5 }}
+          />
+          Edytuj konia
+        </MenuItem>
+
+        <Divider />
+
+        <MenuItem
+          sx={{ color: "error.main" }}
+          onClick={() => {
+            if (menuHorse) {
+              void removeHorse(menuHorse);
+            }
+          }}
+        >
+          <DeleteOutlineRoundedIcon
+            fontSize="small"
+            sx={{ mr: 1.5 }}
+          />
+          Usuń konia
+        </MenuItem>
+      </Menu>
+
+      <Dialog
+        open={formOpen}
+        onClose={() => !saving && setFormOpen(false)}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>
+          {editingHorse ? "Edytuj konia" : "Dodaj konia"}
+        </DialogTitle>
+
         <DialogContent>
-         
-{error && (
-  <Alert severity="error" sx={{ mb: 2 }}>
-    {error}
-  </Alert>
-)}
+          <Box
+            sx={{
+              mt: 1,
+              display: "grid",
+              gridTemplateColumns: {
+                xs: "1fr",
+                md: "repeat(2, minmax(0, 1fr))",
+              },
+              gap: 2,
+            }}
+          >
+            <TextField
+              label="Imię"
+              value={form.name}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  name: event.target.value,
+                }))
+              }
+              required
+              autoFocus
+            />
 
-	   <TextField
-            label="Imię"
-            fullWidth
-            sx={{ mt: 1, mb: 2 }}
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
+            <TextField
+              label="Rasa"
+              value={form.breed}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  breed: event.target.value,
+                }))
+              }
+            />
 
-          <TextField
-            label="Rasa"
-            fullWidth
-            sx={{ mb: 2 }}
-            value={form.breed}
-            onChange={(e) => setForm({ ...form, breed: e.target.value })}
-          />
+            <FormControl>
+              <InputLabel>Płeć</InputLabel>
+              <Select
+                label="Płeć"
+                value={form.gender}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    gender: event.target.value,
+                  }))
+                }
+              >
+                <MenuItem value="">Brak</MenuItem>
+                <MenuItem value="Klacz">Klacz</MenuItem>
+                <MenuItem value="Wałach">Wałach</MenuItem>
+                <MenuItem value="Ogier">Ogier</MenuItem>
+              </Select>
+            </FormControl>
 
-         <FormControl fullWidth sx={{ mb: 2 }}>
-  <InputLabel>Płeć</InputLabel>
-  <Select
-    label="Płeć"
-    value={form.gender}
-    onChange={(e) => setForm({ ...form, gender: e.target.value })}
-  >
-    <MenuItem value="">Brak</MenuItem>
-    <MenuItem value="Klacz">Klacz</MenuItem>
-    <MenuItem value="Wałach">Wałach</MenuItem>
-    <MenuItem value="Ogier">Ogier</MenuItem>
-  </Select>
-</FormControl>
+            <TextField
+              label="Maść"
+              value={form.color}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  color: event.target.value,
+                }))
+              }
+            />
 
-          <TextField
-            label="Maść"
-            fullWidth
-            sx={{ mb: 2 }}
-            value={form.color}
-            onChange={(e) => setForm({ ...form, color: e.target.value })}
-          />
+            <TextField
+              label="Wysokość"
+              type="number"
+              value={form.height_cm}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  height_cm: event.target.value,
+                }))
+              }
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    cm
+                  </InputAdornment>
+                ),
+              }}
+            />
 
-          <TextField
-            label="Wysokość cm"
-            type="number"
-            fullWidth
-            sx={{ mb: 2 }}
-            value={form.height_cm}
-            onChange={(e) => setForm({ ...form, height_cm: e.target.value })}
-          />
+            <TextField
+              label="Maksymalna waga jeźdźca"
+              type="number"
+              value={form.max_rider_weight}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  max_rider_weight: event.target.value,
+                }))
+              }
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    kg
+                  </InputAdornment>
+                ),
+              }}
+            />
 
-          <TextField
-            label="Maks. waga jeźdźca"
-            type="number"
-            fullWidth
-            sx={{ mb: 2 }}
-            value={form.max_rider_weight}
-            onChange={(e) => setForm({ ...form, max_rider_weight: e.target.value })}
-          />
+            <TextField
+              label="Maks. jazd dziennie"
+              type="number"
+              value={form.max_lessons_per_day}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  max_lessons_per_day: event.target.value,
+                }))
+              }
+              inputProps={{ min: 1 }}
+            />
 
-          <TextField
-            label="Maks. jazd dziennie"
-            type="number"
-            fullWidth
-            sx={{ mb: 2 }}
-            value={form.max_lessons_per_day}
-            onChange={(e) => setForm({ ...form, max_lessons_per_day: e.target.value })}
-          />
+            <FormControl>
+              <InputLabel>Status</InputLabel>
+              <Select
+                label="Status"
+                value={form.status}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    status: event.target.value,
+                  }))
+                }
+              >
+                <MenuItem value="available">
+                  Dostępny
+                </MenuItem>
+                <MenuItem value="resting">
+                  Odpoczywa
+                </MenuItem>
+                <MenuItem value="unavailable">
+                  Niedostępny
+                </MenuItem>
+              </Select>
+            </FormControl>
 
-         <FormControl fullWidth sx={{ mb: 2 }}>
-  <InputLabel>Status</InputLabel>
-  <Select
-    label="Status"
-    value={form.status}
-    onChange={(e) => setForm({ ...form, status: e.target.value })}
-  >
-    <MenuItem value="available">Dostępny</MenuItem>
-    <MenuItem value="resting">Odpoczywa</MenuItem>
-    <MenuItem value="unavailable">Niedostępny</MenuItem>
-  </Select>
-</FormControl>
-
-          <TextField
-            label="Notatki"
-            multiline
-            rows={3}
-            fullWidth
-            sx={{ mb: 2 }}
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-          />
-
-   <DialogActions sx={{ px: 0 }}>
-  <Button onClick={() => setOpen(false)}>
-    Anuluj
-  </Button>
-
-  <Button variant="contained" onClick={handleCreateHorse}>
-    Zapisz konia
-  </Button>
-</DialogActions>
+            <TextField
+              label="Notatki"
+              value={form.notes}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  notes: event.target.value,
+                }))
+              }
+              multiline
+              minRows={3}
+              sx={{ gridColumn: { md: "1 / -1" } }}
+            />
+          </Box>
         </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button
+            onClick={() => setFormOpen(false)}
+            disabled={saving}
+          >
+            Anuluj
+          </Button>
+
+          <Button
+            variant="contained"
+            onClick={() => void saveHorse()}
+            disabled={saving}
+            startIcon={
+              saving ? (
+                <CircularProgress
+                  size={18}
+                  color="inherit"
+                />
+              ) : (
+                <PetsRoundedIcon />
+              )
+            }
+          >
+            {editingHorse
+              ? "Zapisz zmiany"
+              : "Dodaj konia"}
+          </Button>
+        </DialogActions>
       </Dialog>
-   <Snackbar
-  open={Boolean(successMessage)}
-  autoHideDuration={3000}
-  onClose={() => setSuccessMessage("")}
-  message={successMessage}
-/>
- </Box>
+
+      <Snackbar
+        open={message.open}
+        autoHideDuration={4000}
+        onClose={() =>
+          setMessage((current) => ({
+            ...current,
+            open: false,
+          }))
+        }
+        anchorOrigin={{
+          vertical: "bottom",
+          horizontal: "right",
+        }}
+      >
+        <Alert
+          severity={message.severity}
+          variant="filled"
+          onClose={() =>
+            setMessage((current) => ({
+              ...current,
+              open: false,
+            }))
+          }
+        >
+          {message.text}
+        </Alert>
+      </Snackbar>
+    </Box>
   );
 }

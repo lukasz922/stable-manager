@@ -1,32 +1,13 @@
-const API = "http://localhost:8000";
-
-async function getErrorMessage(
-  response: Response,
-  fallback: string
-): Promise<string> {
-  try {
-    const data = await response.json();
-
-    if (typeof data?.detail === "string") {
-      return data.detail;
-    }
-  } catch {
-    // odpowiedź nie była JSON-em
-  }
-
-  return fallback;
-}
+import { api } from "./client";
 
 export type Ride = {
   id: number;
   client_id: number;
   horse_id: number;
   instructor_id: number;
-
   client_name?: string | null;
   horse_name?: string | null;
   instructor_name?: string | null;
-
   start_time: string;
   duration_minutes: number;
   ride_type: string;
@@ -44,78 +25,40 @@ export type RideCreate = {
   status: string;
   notes?: string;
 };
+
 export async function getRides(): Promise<Ride[]> {
-  const response = await fetch(`${API}/rides`);
-
-  if (!response.ok) {
-    throw new Error("Nie udało się pobrać jazd.");
-  }
-
-  return response.json();
+  const { data } = await api.get<Ride[]>("/rides");
+  return data;
 }
 
-export async function createRide(data: RideCreate): Promise<Ride> {
-  const response = await fetch(`${API}/rides`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
-
- if (!response.ok) {
-  throw new Error(
-    await getErrorMessage(
-      response,
-      "Nie udało się dodać jazdy."
-    )
-  );
-}
-
-  return response.json();
+export async function createRide(
+  payload: RideCreate
+): Promise<Ride> {
+  const { data } = await api.post<Ride>("/rides", payload);
+  return data;
 }
 
 export async function updateRide(
-  id: number,
-  data: RideCreate
+  rideId: number,
+  payload: RideCreate
 ): Promise<Ride> {
-  const response = await fetch(`${API}/rides/${id}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-  throw new Error(
-    await getErrorMessage(
-      response,
-      "Nie udało się zaktualizować jazdy."
-    )
+  const { data } = await api.put<Ride>(
+    `/rides/${rideId}`,
+    payload
   );
+
+  return data;
 }
 
-  return response.json();
+export async function deleteRide(
+  rideId: number
+): Promise<void> {
+  await api.delete(`/rides/${rideId}`);
 }
 
-export async function deleteRide(id: number): Promise<void> {
-  const response = await fetch(`${API}/rides/${id}`, {
-    method: "DELETE",
-  });
-
-  if (!response.ok) {
-    throw new Error("Nie udało się usunąć jazdy.");
-  }
-}
-
-
-export async function getRide(id: number): Promise<Ride> {
-  const response = await fetch(`${API}/rides/${id}`);
-
-  if (!response.ok) {
-    throw new Error("Nie udało się pobrać jazdy.");
-  }
-
-  return response.json();
+export async function getRide(
+  rideId: number
+): Promise<Ride> {
+  const { data } = await api.get<Ride>(`/rides/${rideId}`);
+  return data;
 }

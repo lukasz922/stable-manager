@@ -18,8 +18,9 @@ import interactionPlugin from "@fullcalendar/interaction";
 import { RideDialog } from "../components/calendar/RideDialog";
 import { getRides, updateRide, type Ride } from "../api/rides";
 import { getHorses, type Horse } from "../api/horses";
-import {getInstructors, type Instructor,} from "../api/instructors";
+import { getInstructors, type Instructor } from "../api/instructors";
 import { useEffect, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
 
 function toLocalDateTime(date: Date): string {
   const offset = date.getTimezoneOffset();
@@ -28,7 +29,24 @@ function toLocalDateTime(date: Date): string {
   return localDate.toISOString().slice(0, 19);
 }
 
+const statCardSx = {
+  border: "1px solid #e7eaf0",
+  borderRadius: 3,
+  p: 2.25,
+  backgroundColor: "#ffffff",
+  cursor: "pointer",
+  transition: "transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease",
+  boxShadow: "0 8px 24px rgba(15, 23, 42, 0.04)",
+  "&:hover": {
+    transform: "translateY(-2px)",
+    boxShadow: "0 14px 30px rgba(15, 23, 42, 0.08)",
+    borderColor: "#d8dde8",
+  },
+} as const;
+
 export function CalendarPage() {
+  const { hasPermission } = useAuth();
+  const canManageCalendar = hasPermission("calendar.manage");
   const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -123,24 +141,27 @@ const events = filteredRides.map((ride) => ({
   ),
   backgroundColor:
   ride.status === "completed"
-    ? "#2e7d32"
+    ? "#e8f5e9"
     : ride.status === "checked_in"
-    ? "#ed6c02"
+    ? "#fff3e0"
     : ride.status === "cancelled"
-    ? "#d32f2f"
-    : "#1976d2",
+    ? "#ffebee"
+    : "#e3f2fd",
+  textColor: "#172033",
+  classNames: [`ride-status-${ride.status}`],
   borderColor:
   ride.status === "completed"
-    ? "#2e7d32"
+    ? "#43a047"
     : ride.status === "checked_in"
-    ? "#ed6c02"
+    ? "#fb8c00"
     : ride.status === "cancelled"
-    ? "#d32f2f"
-    : "#1976d2",
+    ? "#e53935"
+    : "#1e88e5",
   extendedProps: {
     clientName: ride.client_name || "Klient",
     horseName: ride.horse_name || "Koń",
     instructorName: ride.instructor_name || "Instruktor",
+    status: ride.status,
   },
 }));
 
@@ -153,14 +174,48 @@ const events = filteredRides.map((ride) => ({
   }
 
   return (
-    <Box>
-      <Typography variant="h4" fontWeight={800} gutterBottom>
-        📅 Kalendarz jazd
-      </Typography>
+    <Box className="stable-calendar-page">
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: { xs: "flex-start", md: "center" },
+          justifyContent: "space-between",
+          gap: 2,
+          mb: 3,
+          flexDirection: { xs: "column", md: "row" },
+        }}
+      >
+        <Box>
+          <Typography variant="h4" fontWeight={800} gutterBottom>
+            Kalendarz jazd
+          </Typography>
 
-      <Typography color="text.secondary" sx={{ mb: 3 }}>
-        Tygodniowy harmonogram jazd konnych.
-      </Typography>
+          <Typography color="text.secondary">
+            Zarządzaj planem jazd, dostępnością koni i instruktorów.
+          </Typography>
+        </Box>
+
+        {canManageCalendar && (
+          <Button
+            variant="contained"
+            onClick={() => {
+              setSelectedRideId(null);
+              setSelectedDate(toLocalDateTime(new Date()));
+              setDialogOpen(true);
+            }}
+            sx={{
+              borderRadius: 2.5,
+              px: 2.5,
+              py: 1.15,
+              textTransform: "none",
+              fontWeight: 700,
+              boxShadow: "0 8px 20px rgba(25, 118, 210, 0.22)",
+            }}
+          >
+            + Dodaj jazdę
+          </Button>
+        )}
+      </Box>
 <Box
   sx={{
     display: "grid",
@@ -176,16 +231,9 @@ const events = filteredRides.map((ride) => ({
   <Box
   onClick={() => setSelectedStatus("")}
   sx={{
-    border: "1px solid #e5e7eb",
-    borderRadius: 2,
-    p: 2,
-    backgroundColor: "#fff",
-    cursor: "pointer",
-    transition: "0.2s",
-    "&:hover": {
-      transform: "translateY(-2px)",
-      boxShadow: 2,
-    },
+    ...statCardSx,
+    borderColor: selectedStatus === "" ? "#90caf9" : "#e7eaf0",
+    backgroundColor: selectedStatus === "" ? "#f5faff" : "#ffffff",
   }}
 >
   <Typography color="text.secondary" variant="body2">
@@ -200,18 +248,11 @@ const events = filteredRides.map((ride) => ({
   <Box
     onClick={() => setSelectedStatus("planned")} 
 sx={{
-      border: "1px solid #e5e7eb",
-      borderRadius: 2,
-      p: 2,
-      backgroundColor: "#fff",
-    cursor: "pointer",
-transition: "0.2s",
-"&:hover": {
-  transform: "translateY(-2px)",
-  boxShadow: 2,
-    },
-}}
-  >
+    ...statCardSx,
+    borderColor: selectedStatus === "planned" ? "#90caf9" : "#e7eaf0",
+    backgroundColor: selectedStatus === "planned" ? "#f5faff" : "#ffffff",
+  }}
+>
     <Typography color="text.secondary" variant="body2">
       ⏳ Zaplanowane
     </Typography>
@@ -223,16 +264,9 @@ transition: "0.2s",
   <Box
   onClick={() => setSelectedStatus("completed")}
   sx={{
-    border: "1px solid #e5e7eb",
-    borderRadius: 2,
-    p: 2,
-    backgroundColor: "#fff",
-    cursor: "pointer",
-    transition: "0.2s",
-    "&:hover": {
-      transform: "translateY(-2px)",
-      boxShadow: 2,
-    },
+    ...statCardSx,
+    borderColor: selectedStatus === "completed" ? "#90caf9" : "#e7eaf0",
+    backgroundColor: selectedStatus === "completed" ? "#f5faff" : "#ffffff",
   }}
 >
   <Typography color="text.secondary" variant="body2">
@@ -247,16 +281,9 @@ transition: "0.2s",
   <Box
   onClick={() => setSelectedStatus("cancelled")}
   sx={{
-    border: "1px solid #e5e7eb",
-    borderRadius: 2,
-    p: 2,
-    backgroundColor: "#fff",
-    cursor: "pointer",
-    transition: "0.2s",
-    "&:hover": {
-      transform: "translateY(-2px)",
-      boxShadow: 2,
-    },
+    ...statCardSx,
+    borderColor: selectedStatus === "cancelled" ? "#90caf9" : "#e7eaf0",
+    backgroundColor: selectedStatus === "cancelled" ? "#f5faff" : "#ffffff",
   }}
 >
   <Typography color="text.secondary" variant="body2">
@@ -278,7 +305,14 @@ transition: "0.2s",
 <Stack
   direction={{ xs: "column", md: "row" }}
   spacing={2}
-  sx={{ mb: 3 }}
+  sx={{
+    mb: 3,
+    p: 2,
+    border: "1px solid #e7eaf0",
+    borderRadius: 3,
+    backgroundColor: "#ffffff",
+    boxShadow: "0 8px 24px rgba(15, 23, 42, 0.04)",
+  }}
 >
 <TextField
   label="🔎 Klient"
@@ -347,24 +381,30 @@ transition: "0.2s",
   </Button>
 </Stack>
       <Box
+        className="stable-calendar-shell"
         sx={{
           background: "#fff",
-          border: "1px solid #e5e7eb",
-          borderRadius: 2,
-          p: 2,
+          border: "1px solid #e7eaf0",
+          borderRadius: 3,
+          p: { xs: 1, md: 2 },
+          boxShadow: "0 14px 34px rgba(15, 23, 42, 0.06)",
+          overflow: "hidden",
         }}
       >
         <FullCalendar
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           initialView="timeGridWeek"
           height="auto"
+          stickyHeaderDates={true}
+          dayMaxEventRows={4}
+          moreLinkText={(count) => `+${count} więcej`}
           locale="pl"
           firstDay={1}
           weekends={true}
           allDaySlot={false}
           nowIndicator={true}
-          selectable={true}
-          editable={true}
+          selectable={canManageCalendar}
+          editable={canManageCalendar}
           eventDurationEditable={false}
           slotMinTime="08:00:00"
           slotMaxTime="21:00:00"
@@ -373,63 +413,65 @@ transition: "0.2s",
           snapDuration="00:15:00"
           events={events}
 eventContent={(info) => {
-  const start = info.event.start;
-  const end = info.event.end;
+            const start = info.event.start;
+            const end = info.event.end;
+            const status = info.event.extendedProps.status as string;
 
-  const formatTime = (date: Date | null) =>
-    date
-      ? date.toLocaleTimeString("pl-PL", {
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      : "";
+            const formatTime = (date: Date | null) =>
+              date
+                ? date.toLocaleTimeString("pl-PL", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "";
 
-  return (
-   <Box
-  sx={{
-    px: 1,
-    py: 0.75,
-    borderRadius: 1,
-    lineHeight: 1.25,
-    overflow: "hidden",
-    height: "100%",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-  }}
->
-      <Typography
-        component="div"
-        sx={{
-          fontSize: "0.78rem",
-          letterSpacing: 0.2,
-          fontWeight: 800,
-          mb: 0.25,
-        }}
-      >
-        {formatTime(start)}–{formatTime(end)}
-      </Typography>
+            const statusLabel =
+              status === "completed"
+                ? "Odbyta"
+                : status === "checked_in"
+                  ? "Klient obecny"
+                  : status === "cancelled"
+                    ? "Anulowana"
+                    : "Zaplanowana";
 
-      <Typography
-        component="div"
-        sx={{
-          fontSize: "0.82rem",
-          fontWeight: 700,
-        }}
-      >
-        👤 {info.event.extendedProps.clientName}
-      </Typography>
+            return (
+              <Box className="stable-calendar-event-content">
+                <Box className="stable-calendar-event-top">
+                  <Typography
+                    component="div"
+                    className="stable-calendar-event-time"
+                  >
+                    {formatTime(start)}–{formatTime(end)}
+                  </Typography>
 
-      <Typography component="div" sx={{ fontSize: "0.72rem" }}>
-        🐴 {info.event.extendedProps.horseName}
-      </Typography>
+                  <Box className="stable-calendar-event-badge">
+                    {statusLabel}
+                  </Box>
+                </Box>
 
-      <Typography component="div" sx={{ fontSize: "0.72rem" }}>
-        👨‍🏫 {info.event.extendedProps.instructorName}
-      </Typography>
-    </Box>
-  );
-}}
+                <Typography
+                  component="div"
+                  className="stable-calendar-event-client"
+                >
+                  {info.event.extendedProps.clientName}
+                </Typography>
+
+                <Typography
+                  component="div"
+                  className="stable-calendar-event-meta"
+                >
+                  🐴 {info.event.extendedProps.horseName}
+                </Typography>
+
+                <Typography
+                  component="div"
+                  className="stable-calendar-event-meta"
+                >
+                  👨‍🏫 {info.event.extendedProps.instructorName}
+                </Typography>
+              </Box>
+            );
+          }}
           headerToolbar={{
             left: "prev,next today",
             center: "title",
@@ -442,16 +484,38 @@ eventContent={(info) => {
             day: "Dzień",
           }}
           eventClick={(info) => {
+            if (!canManageCalendar) {
+              setErrorMessage(
+                "Masz dostęp tylko do podglądu kalendarza."
+              );
+              return;
+            }
+
             setSelectedRideId(Number(info.event.id));
             setSelectedDate(info.event.startStr);
             setDialogOpen(true);
           }}
           dateClick={(info) => {
+            if (!canManageCalendar) {
+              setErrorMessage(
+                "Brak uprawnienia do dodawania jazd."
+              );
+              return;
+            }
+
             setSelectedRideId(null);
             setSelectedDate(info.dateStr);
             setDialogOpen(true);
           }}
           eventDrop={async (info) => {
+            if (!canManageCalendar) {
+              info.revert();
+              setErrorMessage(
+                "Brak uprawnienia do zmiany terminu jazdy."
+              );
+              return;
+            }
+
             const rideId = Number(info.event.id);
             const ride = rides.find((item) => item.id === rideId);
 

@@ -1,8 +1,15 @@
-import { Card, CardContent, Typography } from "@mui/material";
+import type { ReactNode } from "react";
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+} from "@mui/material";
+import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 
 type DashboardAlertProps = {
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
 };
 
 export default function DashboardAlert({
@@ -13,19 +20,41 @@ export default function DashboardAlert({
     <Card
       elevation={0}
       sx={{
-        mt: 4,
-        border: "1px solid #e5e7eb",
-        borderRadius: 3,
+        mt: 3,
+        border: "1px solid",
+        borderColor: "warning.light",
+        borderRadius: 4,
+        background:
+          "linear-gradient(135deg, rgba(255, 248, 230, 0.96), #ffffff)",
       }}
     >
-      <CardContent>
-        <Typography
-          variant="h5"
-          fontWeight={700}
-          gutterBottom
+      <CardContent sx={{ p: 3, "&:last-child": { pb: 3 } }}>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1.25,
+            mb: 2,
+          }}
         >
-          ⚠️ {title}
-        </Typography>
+          <Box
+            sx={{
+              width: 40,
+              height: 40,
+              borderRadius: 2.5,
+              display: "grid",
+              placeItems: "center",
+              color: "warning.dark",
+              bgcolor: "warning.light",
+            }}
+          >
+            <WarningAmberRoundedIcon />
+          </Box>
+
+          <Typography variant="h6" fontWeight={800}>
+            {title}
+          </Typography>
+        </Box>
 
         {children}
       </CardContent>

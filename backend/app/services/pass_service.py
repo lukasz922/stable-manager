@@ -14,12 +14,8 @@ def find_available_pass(
     ride_start_time: datetime,
 ) -> Pass | None:
     """
-    Zwraca aktywny karnet klienta, który:
-    - ma dostępne wejścia,
-    - jest ważny w dniu jazdy.
-
-    Jeśli klient ma kilka karnetów, używany jest ten,
-    który wygasa najwcześniej.
+    Zwraca pierwszy aktywny i ważny karnet klienta,
+    który ma dostępne wejście.
     """
     ride_date = ride_start_time.date()
 
@@ -40,13 +36,74 @@ def find_available_pass(
     )
 
 
-def get_ride_snapshot(ride: Ride) -> dict[str, str | None]:
+def get_selected_pass(
+    db: Session,
+    ride: Ride,
+) -> Pass:
     """
-    Przygotowuje migawkę danych jazdy do zapisania w historii.
+    Zwraca karnet przypisany do jazdy albo automatycznie
+    wybiera właściwy karnet klienta.
+    """
+    ride_date = ride.start_time.date()
 
-    Dzięki temu informacje pozostają dostępne nawet wtedy,
-    gdy sama jazda zostanie później usunięta.
-    """
+    if ride.pass_id is not None:
+        client_pass = db.get(Pass, ride.pass_id)
+
+        if client_pass is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Karnet przypisany do jazdy nie istnieje.",
+            )
+
+        if client_pass.client_id != ride.client_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Wybrany karnet nie należy do klienta tej jazdy.",
+            )
+
+        if not client_pass.active:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Wybrany karnet jest nieaktywny.",
+            )
+
+        if client_pass.remaining_entries <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Wybrany karnet nie ma dostępnych wejść.",
+            )
+
+        if not (
+            client_pass.valid_from <= ride_date
+            <= client_pass.valid_until
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Wybrany karnet nie jest ważny w dniu tej jazdy.",
+            )
+
+        return client_pass
+
+    client_pass = find_available_pass(
+        db=db,
+        client_id=ride.client_id,
+        ride_start_time=ride.start_time,
+    )
+
+    if client_pass is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Klient nie ma aktywnego karnetu z dostępnymi "
+                "wejściami na dzień tej jazdy."
+            ),
+        )
+
+    ride.pass_id = client_pass.id
+    return client_pass
+
+
+def get_ride_snapshot(ride: Ride) -> dict[str, str | None]:
     client_name = None
     horse_name = None
     instructor_name = None
@@ -82,10 +139,6 @@ def save_pass_history(
     note: str,
     entries: int = 1,
 ) -> None:
-    """
-    Zapisuje operację wykorzystania lub zwrotu wejścia
-    razem z migawką danych jazdy.
-    """
     snapshot = get_ride_snapshot(ride)
 
     history = PassHistory(
@@ -109,12 +162,20 @@ def find_pass_used_for_ride(
     ride: Ride,
 ) -> Pass | None:
     """
-    Szuka karnetu, z którego ostatnio odjęto wejście
-    dla podanej jazdy.
+    Najpierw korzysta z trwałego ride.pass_id.
+    Dla starszych danych używa historii odliczeń.
     """
+    if ride.pass_id is not None:
+        client_pass = db.get(Pass, ride.pass_id)
+        if client_pass is not None:
+            return client_pass
+
     last_history = (
         db.query(PassHistory)
-        .filter(PassHistory.ride_id == ride.id)
+        .filter(
+            PassHistory.ride_id == ride.id,
+            PassHistory.operation == "DEDUCT",
+        )
         .order_by(
             PassHistory.created_at.desc(),
             PassHistory.id.desc(),
@@ -122,7 +183,7 @@ def find_pass_used_for_ride(
         .first()
     )
 
-    if last_history and last_history.operation == "DEDUCT":
+    if last_history:
         return db.get(Pass, last_history.pass_id)
 
     return None
@@ -132,31 +193,13 @@ def deduct_pass_entry(
     db: Session,
     ride: Ride,
 ) -> None:
-    """
-    Odejmuje jedno wejście z karnetu.
-
-    Funkcja nie odejmie wejścia drugi raz, jeśli jazda
-    została już rozliczona.
-    """
     if ride.pass_entry_deducted:
         return
 
-    client_pass = find_available_pass(
-        db=db,
-        client_id=ride.client_id,
-        ride_start_time=ride.start_time,
-    )
-
-    if client_pass is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Klient nie ma aktywnego karnetu z dostępnymi "
-                "wejściami na dzień tej jazdy."
-            ),
-        )
+    client_pass = get_selected_pass(db, ride)
 
     client_pass.remaining_entries -= 1
+    ride.pass_id = client_pass.id
     ride.pass_entry_deducted = True
 
     if client_pass.remaining_entries <= 0:
@@ -169,7 +212,10 @@ def deduct_pass_entry(
         ride=ride,
         operation="DEDUCT",
         entries=1,
-        note="Jazda została zakończona automatycznie – odliczono 1 wejście z karnetu.",
+        note=(
+            "Jazda została zakończona automatycznie – "
+            "odliczono 1 wejście z karnetu."
+        ),
     )
 
 
@@ -177,31 +223,10 @@ def restore_pass_entry(
     db: Session,
     ride: Ride,
 ) -> None:
-    """
-    Zwraca jedno wejście do karnetu po cofnięciu statusu
-    jazdy z completed na inny status.
-    """
     if not ride.pass_entry_deducted:
         return
 
     client_pass = find_pass_used_for_ride(db, ride)
-
-    if client_pass is None:
-        ride_date = ride.start_time.date()
-
-        client_pass = (
-            db.query(Pass)
-            .filter(
-                Pass.client_id == ride.client_id,
-                Pass.valid_from <= ride_date,
-                Pass.valid_until >= ride_date,
-            )
-            .order_by(
-                Pass.valid_until.asc(),
-                Pass.id.asc(),
-            )
-            .first()
-        )
 
     if client_pass is None:
         raise HTTPException(
@@ -220,6 +245,7 @@ def restore_pass_entry(
     if client_pass.remaining_entries > 0:
         client_pass.active = True
 
+    ride.pass_id = client_pass.id
     ride.pass_entry_deducted = False
 
     save_pass_history(
@@ -238,15 +264,6 @@ def apply_pass_status_change(
     old_status: str | None,
     new_status: str,
 ) -> None:
-    """
-    Obsługuje zmianę statusu jazdy:
-
-    planned/cancelled -> completed:
-        odejmuje wejście;
-
-    completed -> planned/cancelled:
-        zwraca wejście.
-    """
     if new_status == "completed" and old_status != "completed":
         deduct_pass_entry(db, ride)
 

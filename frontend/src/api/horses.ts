@@ -1,4 +1,4 @@
-const API = "http://localhost:8000";
+import { api } from "./client";
 
 export type Horse = {
   id: number;
@@ -14,16 +14,6 @@ export type Horse = {
   notes?: string | null;
 };
 
-export async function getHorses(): Promise<Horse[]> {
-  const response = await fetch(`${API}/horses`);
-
-  if (!response.ok) {
-    throw new Error("Nie udało się pobrać koni.");
-  }
-
-  return response.json();
-}
-
 export interface HorseCreate {
   name: string;
   breed?: string;
@@ -36,44 +26,32 @@ export interface HorseCreate {
   notes?: string;
 }
 
-export async function createHorse(data: HorseCreate): Promise<Horse> {
-  const response = await fetch(`${API}/horses`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    throw new Error("Nie udało się dodać konia.");
-  }
-
-  return response.json();
+export async function getHorses(): Promise<Horse[]> {
+  const { data } = await api.get<Horse[]>("/horses");
+  return data;
 }
 
-export async function deleteHorse(id: number): Promise<void> {
-  const response = await fetch(`${API}/horses/${id}`, {
-    method: "DELETE",
-  });
-
-  if (!response.ok) {
-    throw new Error("Nie udało się usunąć konia.");
-  }
+export async function createHorse(
+  payload: HorseCreate
+): Promise<Horse> {
+  const { data } = await api.post<Horse>("/horses", payload);
+  return data;
 }
 
-export async function updateHorse(id: number, data: HorseCreate): Promise<Horse> {
-  const response = await fetch(`${API}/horses/${id}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
+export async function updateHorse(
+  horseId: number,
+  payload: HorseCreate
+): Promise<Horse> {
+  const { data } = await api.put<Horse>(
+    `/horses/${horseId}`,
+    payload
+  );
 
-  if (!response.ok) {
-    throw new Error("Nie udało się zaktualizować konia.");
-  }
+  return data;
+}
 
-  return response.json();
+export async function deleteHorse(
+  horseId: number
+): Promise<void> {
+  await api.delete(`/horses/${horseId}`);
 }

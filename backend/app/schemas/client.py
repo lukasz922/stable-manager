@@ -23,10 +23,12 @@ class ClientUpdate(BaseModel):
     qr_code: str | None = None
     rfid_uid: str | None = None
     notes: str | None = None
+    is_active: bool | None = None
 
 
 class ClientResponse(ClientCreate):
     id: int
+    is_active: bool
 
     model_config = {
         "from_attributes": True

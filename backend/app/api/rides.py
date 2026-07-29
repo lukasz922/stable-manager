@@ -5,6 +5,8 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.session import get_db
+from app.core.dependencies import require_permission
+from app.models.instructor_schedule import InstructorSchedule, ScheduleStatus
 from app.models.ride import Ride
 from app.schemas.ride import (
     RideCreate,
@@ -22,6 +24,7 @@ def ride_to_read(ride: Ride) -> RideRead:
         client_id=ride.client_id,
         horse_id=ride.horse_id,
         instructor_id=ride.instructor_id,
+        pass_id=ride.pass_id,
         start_time=ride.start_time,
         duration_minutes=ride.duration_minutes,
         ride_type=ride.ride_type,
@@ -54,6 +57,155 @@ def get_ride_with_relations(
         .filter(Ride.id == ride_id)
         .first()
     )
+
+
+
+def validate_selected_pass(
+    db: Session,
+    client_id: int,
+    pass_id: int | None,
+    ride_start_time: datetime,
+) -> None:
+    if pass_id is None:
+        return
+
+    from app.models.client_pass import Pass
+
+    client_pass = db.get(Pass, pass_id)
+
+    if client_pass is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Wybrany karnet nie istnieje.",
+        )
+
+    if client_pass.client_id != client_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Wybrany karnet nie należy do klienta tej jazdy.",
+        )
+
+    ride_date = ride_start_time.date()
+
+    if not (
+        client_pass.valid_from <= ride_date
+        <= client_pass.valid_until
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Wybrany karnet nie jest ważny w dniu tej jazdy.",
+        )
+
+def check_instructor_schedule(
+    db: Session,
+    payload: RideCreate,
+) -> None:
+    if payload.status == "cancelled":
+        return
+
+    ride_start = payload.start_time
+    ride_end = ride_start + timedelta(
+        minutes=payload.duration_minutes
+    )
+
+    schedule = (
+        db.query(InstructorSchedule)
+        .filter(
+            InstructorSchedule.instructor_id == payload.instructor_id,
+            InstructorSchedule.date == ride_start.date(),
+        )
+        .first()
+    )
+
+    if schedule is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Instruktor nie ma ustalonego grafiku "
+                "na dzień tej jazdy."
+            ),
+        )
+
+    schedule_status = (
+        schedule.status.value
+        if isinstance(schedule.status, ScheduleStatus)
+        else str(schedule.status)
+    )
+
+    if schedule_status != ScheduleStatus.WORK.value:
+        status_labels = {
+            ScheduleStatus.OFF.value: "wolne",
+            ScheduleStatus.VACATION.value: "urlop",
+            ScheduleStatus.SICK.value: "chorobowe",
+            ScheduleStatus.TRAINING.value: "szkolenie",
+        }
+
+        status_label = status_labels.get(
+            schedule_status,
+            schedule_status,
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Instruktor nie może prowadzić jazdy w tym dniu. "
+                f"Status grafiku: {status_label}."
+            ),
+        )
+
+    required_times = (
+        schedule.start_time,
+        schedule.end_time,
+        schedule.availability_start_time,
+        schedule.availability_end_time,
+    )
+
+    if any(value is None for value in required_times):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Grafik instruktora nie zawiera kompletnych "
+                "godzin pracy i dyspozycyjności."
+            ),
+        )
+
+    work_start = datetime.combine(
+        ride_start.date(),
+        schedule.start_time,
+    )
+    work_end = datetime.combine(
+        ride_start.date(),
+        schedule.end_time,
+    )
+    availability_start = datetime.combine(
+        ride_start.date(),
+        schedule.availability_start_time,
+    )
+    availability_end = datetime.combine(
+        ride_start.date(),
+        schedule.availability_end_time,
+    )
+
+    if ride_start < work_start or ride_end > work_end:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Jazda nie mieści się w godzinach pracy "
+                "instruktora."
+            ),
+        )
+
+    if (
+        ride_start < availability_start
+        or ride_end > availability_end
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Jazda nie mieści się w godzinach "
+                "dyspozycyjności instruktora."
+            ),
+        )
 
 
 def check_ride_conflicts(
@@ -166,7 +318,10 @@ def update_finished_rides(db: Session) -> None:
         db.commit()
 
 @router.get("", response_model=list[RideRead])
-def list_rides(db: Session = Depends(get_db)):
+def list_rides(
+    current_user=Depends(require_permission("calendar.view")),
+    db: Session = Depends(get_db),
+):
     update_finished_rides(db)
     rides = (
         db.query(Ride)
@@ -185,8 +340,16 @@ def list_rides(db: Session = Depends(get_db)):
 @router.post("", response_model=RideRead)
 def create_ride(
     payload: RideCreate,
+    current_user=Depends(require_permission("calendar.manage")),
     db: Session = Depends(get_db),
 ):
+    validate_selected_pass(
+        db,
+        payload.client_id,
+        payload.pass_id,
+        payload.start_time,
+    )
+    check_instructor_schedule(db, payload)
     check_ride_conflicts(db, payload)
 
     ride = Ride(**payload.model_dump())
@@ -218,6 +381,7 @@ def create_ride(
 @router.get("/client/{client_id}", response_model=list[RideRead])
 def list_client_rides(
     client_id: int,
+    current_user=Depends(require_permission("calendar.view")),
     db: Session = Depends(get_db),
 ):
     rides = (
@@ -237,6 +401,7 @@ def list_client_rides(
 @router.get("/{ride_id}", response_model=RideRead)
 def get_ride(
     ride_id: int,
+    current_user=Depends(require_permission("calendar.view")),
     db: Session = Depends(get_db),
 ):
     ride = get_ride_with_relations(db, ride_id)
@@ -254,6 +419,7 @@ def get_ride(
 def update_ride(
     ride_id: int,
     payload: RideCreate,
+    current_user=Depends(require_permission("calendar.manage")),
     db: Session = Depends(get_db),
 ):
     ride = db.get(Ride, ride_id)
@@ -264,6 +430,35 @@ def update_ride(
             detail="Nie znaleziono jazdy.",
         )
 
+    effective_pass_id = (
+        payload.pass_id
+        if payload.pass_id is not None
+        else ride.pass_id
+    )
+
+    protected_data_changed = (
+        payload.client_id != ride.client_id
+        or payload.start_time != ride.start_time
+        or effective_pass_id != ride.pass_id
+    )
+
+    if ride.status == "completed" and protected_data_changed:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Nie można zmienić klienta, terminu ani karnetu "
+                "rozliczonej jazdy. Najpierw cofnij status "
+                "jazdy z „Zakończona”."
+            ),
+        )
+
+    validate_selected_pass(
+        db,
+        payload.client_id,
+        payload.pass_id,
+        payload.start_time,
+    )
+    check_instructor_schedule(db, payload)
     check_ride_conflicts(
         db=db,
         payload=payload,
@@ -273,6 +468,9 @@ def update_ride(
     old_status = ride.status
 
     for key, value in payload.model_dump().items():
+        if key == "pass_id" and value is None:
+            continue
+
         setattr(ride, key, value)
 
     apply_pass_status_change(
@@ -298,6 +496,7 @@ def update_ride(
 def update_ride_status(
     ride_id: int,
     payload: RideStatusUpdate,
+    current_user=Depends(require_permission("calendar.manage")),
     db: Session = Depends(get_db),
 ):
     ride = db.get(Ride, ride_id)
@@ -336,6 +535,7 @@ def update_ride_status(
 )
 def delete_ride(
     ride_id: int,
+    current_user=Depends(require_permission("calendar.manage")),
     db: Session = Depends(get_db),
 ):
     ride = db.get(Ride, ride_id)

@@ -7,6 +7,7 @@ class RideBase(BaseModel):
     client_id: int
     horse_id: int
     instructor_id: int
+    pass_id: int | None = None
 
     start_time: datetime
     duration_minutes: int = 60

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Card,
@@ -11,12 +12,28 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
+  IconButton,
+  InputAdornment,
+  Menu,
   MenuItem,
+  Paper,
   Snackbar,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
+
+import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
+import ConfirmationNumberRoundedIcon from "@mui/icons-material/ConfirmationNumberRounded";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
+import HistoryRoundedIcon from "@mui/icons-material/HistoryRounded";
+import MoreVertRoundedIcon from "@mui/icons-material/MoreVertRounded";
+import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
+import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 
 import { getClients, type Client } from "../api/clients";
 import {
@@ -25,14 +42,38 @@ import {
   getPasses,
   updatePass,
   type ClientPass,
+  type ClientPassCreate,
 } from "../api/passes";
-
 import {
   getPassHistory,
   type PassHistoryItem,
 } from "../api/passHistory";
+import { useAuth } from "../auth/AuthContext";
 
-const emptyForm = {
+type PassForm = {
+  client_id: string;
+  name: string;
+  total_entries: string;
+  remaining_entries: string;
+  valid_from: string;
+  valid_until: string;
+  active: string;
+};
+
+type PassFilter =
+  | "all"
+  | "active"
+  | "expired"
+  | "used"
+  | "inactive";
+
+type MessageState = {
+  open: boolean;
+  text: string;
+  severity: "success" | "error";
+};
+
+const emptyForm: PassForm = {
   client_id: "",
   name: "Karnet 10 wejść",
   total_entries: "10",
@@ -42,130 +83,268 @@ const emptyForm = {
   active: "true",
 };
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatDate(value: string) {
+  return new Date(`${value}T00:00:00`).toLocaleDateString(
+    "pl-PL",
+  );
+}
+
+function getPassStatus(passItem: ClientPass) {
+  const today = todayIso();
+
+  if (!passItem.active) {
+    return {
+      key: "inactive" as const,
+      label: "Nieaktywny",
+      color: "default" as const,
+    };
+  }
+
+  if (passItem.valid_until < today) {
+    return {
+      key: "expired" as const,
+      label: "Wygasł",
+      color: "error" as const,
+    };
+  }
+
+  if (passItem.remaining_entries <= 0) {
+    return {
+      key: "used" as const,
+      label: "Wykorzystany",
+      color: "warning" as const,
+    };
+  }
+
+  return {
+    key: "active" as const,
+    label: "Aktywny",
+    color: "success" as const,
+  };
+}
+
+function progressPercent(passItem: ClientPass) {
+  if (passItem.total_entries <= 0) return 0;
+
+  return Math.max(
+    0,
+    Math.min(
+      100,
+      (passItem.remaining_entries /
+        passItem.total_entries) *
+        100,
+    ),
+  );
+}
+
 export function PassesPage() {
+  const { hasPermission } = useAuth();
+  const canManagePasses =
+    hasPermission("passes.manage");
+
   const [passes, setPasses] = useState<ClientPass[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingPassId, setEditingPassId] = useState<number | null>(null);
-  const [form, setForm] = useState(emptyForm);
-
-  const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
   const [search, setSearch] = useState("");
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [history, setHistory] = useState<PassHistoryItem[]>([]);
-  const [historyPassName, setHistoryPassName] = useState("");
+  const [passFilter, setPassFilter] =
+    useState<PassFilter>("all");
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingPass, setEditingPass] =
+    useState<ClientPass | null>(null);
+  const [form, setForm] = useState<PassForm>(emptyForm);
+
+  const [menuAnchor, setMenuAnchor] =
+    useState<HTMLElement | null>(null);
+  const [menuPass, setMenuPass] =
+    useState<ClientPass | null>(null);
+
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] =
+    useState(false);
+  const [history, setHistory] =
+    useState<PassHistoryItem[]>([]);
+  const [historyPassName, setHistoryPassName] =
+    useState("");
+
+  const [message, setMessage] = useState<MessageState>({
+    open: false,
+    text: "",
+    severity: "success",
+  });
 
   async function loadData() {
     try {
       setLoading(true);
-      setError("");
 
-      const [passesData, clientsData] = await Promise.all([
-        getPasses(),
-        getClients(),
-      ]);
+      const [passesData, clientsData] =
+        await Promise.all([
+          getPasses(),
+          getClients("active"),
+        ]);
 
       setPasses(passesData);
       setClients(clientsData);
-    } catch (err) {
-      console.error(err);
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Nie udało się pobrać danych."
-      );
+    } catch (error) {
+      setMessage({
+        open: true,
+        text:
+          error instanceof Error
+            ? error.message
+            : "Nie udało się pobrać danych karnetów.",
+        severity: "error",
+      });
     } finally {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  const filteredPasses = useMemo(() => {
+    const phrase = search.trim().toLowerCase();
+
+    return passes.filter((passItem) => {
+      const status = getPassStatus(passItem);
+
+      const matchesFilter =
+        passFilter === "all" ||
+        status.key === passFilter;
+
+      const matchesSearch =
+        !phrase ||
+        passItem.name.toLowerCase().includes(phrase) ||
+        (passItem.client_name ?? "")
+          .toLowerCase()
+          .includes(phrase);
+
+      return matchesFilter && matchesSearch;
+    });
+  }, [passes, search, passFilter]);
+
+  const counts = {
+    all: passes.length,
+    active: passes.filter(
+      (item) => getPassStatus(item).key === "active",
+    ).length,
+    expired: passes.filter(
+      (item) => getPassStatus(item).key === "expired",
+    ).length,
+    used: passes.filter(
+      (item) => getPassStatus(item).key === "used",
+    ).length,
+    inactive: passes.filter(
+      (item) =>
+        getPassStatus(item).key === "inactive",
+    ).length,
+  };
 
   function openCreateDialog() {
     const today = new Date();
     const validUntil = new Date();
     validUntil.setMonth(validUntil.getMonth() + 1);
 
-    setEditingPassId(null);
-    setError("");
-
+    setEditingPass(null);
     setForm({
       ...emptyForm,
       valid_from: today.toISOString().slice(0, 10),
-      valid_until: validUntil.toISOString().slice(0, 10),
+      valid_until: validUntil
+        .toISOString()
+        .slice(0, 10),
     });
-
-    setDialogOpen(true);
+    setFormOpen(true);
   }
 
   function openEditDialog(passItem: ClientPass) {
-    setEditingPassId(passItem.id);
-    setError("");
-
+    setEditingPass(passItem);
     setForm({
       client_id: String(passItem.client_id),
       name: passItem.name,
       total_entries: String(passItem.total_entries),
-      remaining_entries: String(passItem.remaining_entries),
+      remaining_entries: String(
+        passItem.remaining_entries,
+      ),
       valid_from: passItem.valid_from,
       valid_until: passItem.valid_until,
       active: String(passItem.active),
     });
-
-    setDialogOpen(true);
+    setFormOpen(true);
+    closeMenu();
   }
 
-  function closeDialog() {
-    setDialogOpen(false);
-    setEditingPassId(null);
-    setError("");
-    setForm(emptyForm);
+  function openMenu(
+    event: React.MouseEvent<HTMLElement>,
+    passItem: ClientPass,
+  ) {
+    setMenuAnchor(event.currentTarget);
+    setMenuPass(passItem);
   }
 
-  async function handleSave() {
+  function closeMenu() {
+    setMenuAnchor(null);
+    setMenuPass(null);
+  }
+
+  async function savePass() {
+    const totalEntries = Number(form.total_entries);
+    const remainingEntries = Number(
+      form.remaining_entries,
+    );
+
     if (!form.client_id) {
-      setError("Wybierz klienta.");
+      setMessage({
+        open: true,
+        text: "Wybierz klienta.",
+        severity: "error",
+      });
       return;
     }
 
     if (!form.name.trim()) {
-      setError("Nazwa karnetu jest wymagana.");
+      setMessage({
+        open: true,
+        text: "Nazwa karnetu jest wymagana.",
+        severity: "error",
+      });
       return;
     }
 
-    const totalEntries = Number(form.total_entries);
-    const remainingEntries = Number(form.remaining_entries);
-
-    if (totalEntries <= 0) {
-      setError("Liczba wszystkich wejść musi być większa od zera.");
+    if (
+      totalEntries <= 0 ||
+      remainingEntries < 0 ||
+      remainingEntries > totalEntries
+    ) {
+      setMessage({
+        open: true,
+        text:
+          "Sprawdź liczbę wszystkich i pozostałych wejść.",
+        severity: "error",
+      });
       return;
     }
 
-    if (remainingEntries < 0 || remainingEntries > totalEntries) {
-      setError(
-        "Pozostała liczba wejść musi mieścić się między 0 a liczbą wszystkich wejść."
-      );
+    if (
+      !form.valid_from ||
+      !form.valid_until ||
+      form.valid_until < form.valid_from
+    ) {
+      setMessage({
+        open: true,
+        text: "Sprawdź daty ważności karnetu.",
+        severity: "error",
+      });
       return;
     }
 
-    if (!form.valid_from || !form.valid_until) {
-      setError("Uzupełnij daty ważności karnetu.");
-      return;
-    }
-
-    if (form.valid_until < form.valid_from) {
-      setError("Data końcowa nie może być wcześniejsza niż początkowa.");
-      return;
-    }
-
-    const payload = {
+    const payload: ClientPassCreate = {
       client_id: Number(form.client_id),
       name: form.name.trim(),
       total_entries: totalEntries,
@@ -176,246 +355,422 @@ export function PassesPage() {
     };
 
     try {
-      setError("");
+      setSaving(true);
 
-      if (editingPassId !== null) {
-        await updatePass(editingPassId, payload);
-        setSuccessMessage("Karnet został zaktualizowany.");
+      if (editingPass) {
+        await updatePass(editingPass.id, payload);
       } else {
         await createPass(payload);
-        setSuccessMessage("Karnet został dodany.");
       }
 
-      closeDialog();
+      setFormOpen(false);
+      setEditingPass(null);
       await loadData();
-    } catch (err) {
-      console.error(err);
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Nie udało się zapisać karnetu."
-      );
+      setMessage({
+        open: true,
+        text: editingPass
+          ? "Karnet został zaktualizowany."
+          : "Karnet został dodany.",
+        severity: "success",
+      });
+    } catch (error) {
+      setMessage({
+        open: true,
+        text:
+          error instanceof Error
+            ? error.message
+            : "Nie udało się zapisać karnetu.",
+        severity: "error",
+      });
+    } finally {
+      setSaving(false);
     }
   }
 
-  async function handleDelete(passItem: ClientPass) {
+  async function openHistory(passItem: ClientPass) {
+    closeMenu();
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setHistory([]);
+    setHistoryPassName(passItem.name);
+
+    try {
+      const data = await getPassHistory(passItem.id);
+      setHistory(data);
+    } catch (error) {
+      setMessage({
+        open: true,
+        text:
+          error instanceof Error
+            ? error.message
+            : "Nie udało się pobrać historii.",
+        severity: "error",
+      });
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function removePass(passItem: ClientPass) {
+    closeMenu();
+
     const confirmed = window.confirm(
-      `Czy na pewno chcesz usunąć karnet „${passItem.name}” klienta ${passItem.client_name || ""}?`
+      `Czy na pewno chcesz usunąć karnet „${passItem.name}”?`,
     );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     try {
       await deletePass(passItem.id);
       await loadData();
-      setSuccessMessage("Karnet został usunięty.");
-    } catch (err) {
-      console.error(err);
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Nie udało się usunąć karnetu."
-      );
+      setMessage({
+        open: true,
+        text: "Karnet został usunięty.",
+        severity: "success",
+      });
+    } catch (error) {
+      setMessage({
+        open: true,
+        text:
+          error instanceof Error
+            ? error.message
+            : "Nie udało się usunąć karnetu.",
+        severity: "error",
+      });
     }
-  }
-
-async function openHistory(passItem: ClientPass) {
-  console.log("Kliknięto historię", passItem);
-
-  setHistoryOpen(true);
-  setHistoryLoading(true);
-  setHistory([]);
-  setHistoryPassName(passItem.name);
-  setError("");
-
-  try {
-    const data = await getPassHistory(passItem.id);
-
-    console.log("Historia:", data);
-    setHistory(data);
-  } catch (err) {
-    console.error("Błąd historii:", err);
-
-    setError(
-      err instanceof Error
-        ? err.message
-        : "Nie udało się pobrać historii."
-    );
-  } finally {
-    setHistoryLoading(false);
-  }
-}
-  const filteredPasses = passes.filter((passItem) => {
-    const phrase = search.toLowerCase();
-
-    return (
-      passItem.name.toLowerCase().includes(phrase) ||
-      (passItem.client_name || "").toLowerCase().includes(phrase)
-    );
-  });
-
-  function getPassStatus(passItem: ClientPass) {
-    const today = new Date().toISOString().slice(0, 10);
-
-    if (!passItem.active) {
-      return {
-        label: "Nieaktywny",
-        color: "default" as const,
-      };
-    }
-
-    if (passItem.valid_until < today) {
-      return {
-        label: "Wygasł",
-        color: "error" as const,
-      };
-    }
-
-    if (passItem.remaining_entries <= 0) {
-      return {
-        label: "Wykorzystany",
-        color: "warning" as const,
-      };
-    }
-
-    return {
-      label: "Aktywny",
-      color: "success" as const,
-    };
   }
 
   if (loading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", mt: 5 }}>
+      <Box
+        sx={{
+          minHeight: 400,
+          display: "grid",
+          placeItems: "center",
+        }}
+      >
         <CircularProgress />
       </Box>
     );
   }
 
   return (
-    <Box>
+    <Box sx={{ pb: 4 }}>
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        justifyContent="space-between"
+        alignItems={{ xs: "stretch", md: "center" }}
+        spacing={2}
+        sx={{ mb: 3 }}
+      >
+        <Box>
+          <Typography variant="h4" fontWeight={800}>
+            Karnety
+          </Typography>
+          <Typography
+            color="text.secondary"
+            sx={{ mt: 0.75 }}
+          >
+            Wejścia klientów, terminy ważności i historia wykorzystania.
+          </Typography>
+        </Box>
+
+        {canManagePasses && (
+          <Button
+            variant="contained"
+            startIcon={<AddRoundedIcon />}
+            onClick={openCreateDialog}
+            sx={{
+              borderRadius: 2.5,
+              textTransform: "none",
+              fontWeight: 800,
+            }}
+          >
+            Dodaj karnet
+          </Button>
+        )}
+      </Stack>
+
       <Box
         sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "repeat(2, minmax(0, 1fr))",
+            lg: "repeat(5, minmax(0, 1fr))",
+          },
           gap: 2,
           mb: 3,
         }}
       >
-        <Box>
-          <Typography variant="h4" fontWeight={800} gutterBottom>
-            🎫 Karnety
-          </Typography>
-
-          <Typography color="text.secondary">
-            Zarządzanie karnetami i liczbą pozostałych wejść.
-          </Typography>
-        </Box>
-
-        <Button variant="contained" onClick={openCreateDialog}>
-          + Dodaj karnet
-        </Button>
+        {([
+          ["all", "Wszystkie"],
+          ["active", "Aktywne"],
+          ["expired", "Wygasłe"],
+          ["used", "Wykorzystane"],
+          ["inactive", "Nieaktywne"],
+        ] as const).map(([key, label]) => (
+          <Card
+            key={key}
+            elevation={0}
+            onClick={() => setPassFilter(key)}
+            sx={{
+              cursor: "pointer",
+              border: "1px solid",
+              borderColor:
+                passFilter === key
+                  ? "primary.main"
+                  : "divider",
+              borderRadius: 4,
+            }}
+          >
+            <CardContent
+              sx={{
+                p: 2,
+                "&:last-child": { pb: 2 },
+              }}
+            >
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                fontWeight={700}
+              >
+                {label}
+              </Typography>
+              <Typography variant="h4" fontWeight={800}>
+                {counts[key]}
+              </Typography>
+            </CardContent>
+          </Card>
+        ))}
       </Box>
 
-      {error && !dialogOpen && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
+      <Paper
+        elevation={0}
+        sx={{
+          p: 2,
+          mb: 2,
+          border: "1px solid",
+          borderColor: "divider",
+          borderRadius: 4,
+        }}
+      >
+        <TextField
+          fullWidth
+          placeholder="Szukaj po nazwie karnetu lub kliencie"
+          value={search}
+          onChange={(event) =>
+            setSearch(event.target.value)
+          }
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchRoundedIcon color="action" />
+              </InputAdornment>
+            ),
+          }}
+        />
+      </Paper>
 
-      <TextField
-        label="Szukaj karnetu"
-        placeholder="Nazwa karnetu lub klient..."
-        fullWidth
-        sx={{ mb: 3 }}
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-      />
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        sx={{ mb: 2 }}
+      >
+        Wyświetlono {filteredPasses.length} z{" "}
+        {passes.length} karnetów
+      </Typography>
 
       {filteredPasses.length === 0 ? (
-        <Typography>Brak karnetów w bazie.</Typography>
+        <Paper
+          elevation={0}
+          sx={{
+            py: 8,
+            px: 2,
+            textAlign: "center",
+            border: "1px solid",
+            borderColor: "divider",
+            borderRadius: 4,
+          }}
+        >
+          <ConfirmationNumberRoundedIcon
+            sx={{
+              fontSize: 56,
+              color: "text.disabled",
+              mb: 1,
+            }}
+          />
+          <Typography fontWeight={800}>
+            Nie znaleziono karnetów
+          </Typography>
+        </Paper>
       ) : (
         <Box
           sx={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+            gridTemplateColumns: {
+              xs: "1fr",
+              md: "repeat(2, minmax(0, 1fr))",
+              xl: "repeat(3, minmax(0, 1fr))",
+            },
             gap: 2,
           }}
         >
           {filteredPasses.map((passItem) => {
             const status = getPassStatus(passItem);
+            const percent = progressPercent(passItem);
 
             return (
               <Card
                 key={passItem.id}
                 elevation={0}
-                sx={{ border: "1px solid #e5e7eb" }}
+                sx={{
+                  height: "100%",
+                  border: "1px solid",
+                  borderColor: "divider",
+                  borderRadius: 4,
+                }}
               >
-                <CardContent>
-                  <Typography variant="overline">
-                    KARNET #{passItem.id}
-                  </Typography>
+                <CardContent
+                  sx={{
+                    p: 2.5,
+                    "&:last-child": { pb: 2.5 },
+                  }}
+                >
+                  <Stack
+                    direction="row"
+                    justifyContent="space-between"
+                    alignItems="flex-start"
+                    spacing={2}
+                  >
+                    <Stack
+                      direction="row"
+                      spacing={1.5}
+                      alignItems="center"
+                    >
+                      <Avatar>
+                        <ConfirmationNumberRoundedIcon />
+                      </Avatar>
+                      <Box>
+                        <Typography
+                          variant="h6"
+                          fontWeight={800}
+                        >
+                          {passItem.name}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                        >
+                          Karnet #{passItem.id}
+                        </Typography>
+                      </Box>
+                    </Stack>
 
-                  <Typography variant="h5" fontWeight={700} gutterBottom>
-                    {passItem.name}
-                  </Typography>
+                    <Tooltip title="Więcej akcji">
+                      <IconButton
+                        onClick={(event) =>
+                          openMenu(event, passItem)
+                        }
+                      >
+                        <MoreVertRoundedIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
 
-                  <Typography>
-                    Klient: {passItem.client_name || `ID ${passItem.client_id}`}
-                  </Typography>
-
-                  <Typography sx={{ mt: 1 }}>
-                    Pozostało wejść:{" "}
-                    <strong>
-                      {passItem.remaining_entries} / {passItem.total_entries}
-                    </strong>
-                  </Typography>
-
-                  <Typography>
-                    Ważny od: {passItem.valid_from}
-                  </Typography>
-
-                  <Typography>
-                    Ważny do: {passItem.valid_until}
-                  </Typography>
-
-                  <Chip
+                  <Stack
+                    direction="row"
+                    spacing={1}
                     sx={{ mt: 2 }}
-                    label={status.label}
-                    color={status.color}
-                  />
+                  >
+                    <Chip
+                      size="small"
+                      label={status.label}
+                      color={status.color}
+                    />
+                  </Stack>
 
-             <Box sx={{ mt: 2, display: "flex", gap: 1, flexWrap: "wrap" }}>
-  <Button
-    variant="outlined"
-    size="small"
-    onClick={() => openEditDialog(passItem)}
-  >
-    Edytuj
-  </Button>
+                  <Divider sx={{ my: 2 }} />
 
-  <Button
-    variant="outlined"
-    size="small"
-    onClick={() => openHistory(passItem)}
-  >
-    Historia
-  </Button>
+                  <Stack spacing={1.25}>
+                    <Stack direction="row" spacing={1.25}>
+                      <PersonRoundedIcon
+                        fontSize="small"
+                        color="action"
+                      />
+                      <Typography variant="body2">
+                        {passItem.client_name ||
+                          `Klient #${passItem.client_id}`}
+                      </Typography>
+                    </Stack>
 
-  <Button
-    variant="outlined"
-    color="error"
-    size="small"
-    onClick={() => handleDelete(passItem)}
-  >
-    Usuń
-  </Button>
-</Box>
+                    <Stack direction="row" spacing={1.25}>
+                      <CalendarMonthRoundedIcon
+                        fontSize="small"
+                        color="action"
+                      />
+                      <Typography variant="body2">
+                        {formatDate(passItem.valid_from)} –{" "}
+                        {formatDate(passItem.valid_until)}
+                      </Typography>
+                    </Stack>
+                  </Stack>
+
+                  <Box sx={{ mt: 2.5 }}>
+                    <Stack
+                      direction="row"
+                      justifyContent="space-between"
+                      sx={{ mb: 0.75 }}
+                    >
+                      <Typography
+                        variant="body2"
+                        fontWeight={700}
+                      >
+                        Pozostałe wejścia
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        fontWeight={800}
+                      >
+                        {passItem.remaining_entries} /{" "}
+                        {passItem.total_entries}
+                      </Typography>
+                    </Stack>
+
+                    <Box
+                      sx={{
+                        height: 8,
+                        borderRadius: 99,
+                        bgcolor: "action.hover",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          width: `${percent}%`,
+                          height: "100%",
+                          borderRadius: 99,
+                          bgcolor:
+                            percent > 25
+                              ? "success.main"
+                              : "warning.main",
+                        }}
+                      />
+                    </Box>
+                  </Box>
+
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    startIcon={<HistoryRoundedIcon />}
+                    onClick={() =>
+                      void openHistory(passItem)
+                    }
+                    sx={{ mt: 2.5 }}
+                  >
+                    Historia karnetu
+                  </Button>
                 </CardContent>
               </Card>
             );
@@ -423,105 +778,175 @@ async function openHistory(passItem: ClientPass) {
         </Box>
       )}
 
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={closeMenu}
+      >
+        {canManagePasses && (
+          <MenuItem
+            onClick={() => {
+              if (menuPass) {
+                openEditDialog(menuPass);
+              }
+            }}
+          >
+            <EditRoundedIcon
+              fontSize="small"
+              sx={{ mr: 1.5 }}
+            />
+            Edytuj karnet
+          </MenuItem>
+        )}
+
+        <MenuItem
+          onClick={() => {
+            if (menuPass) {
+              void openHistory(menuPass);
+            }
+          }}
+        >
+          <HistoryRoundedIcon
+            fontSize="small"
+            sx={{ mr: 1.5 }}
+          />
+          Historia karnetu
+        </MenuItem>
+
+        {canManagePasses && (
+          <>
+            <Divider />
+            <MenuItem
+              sx={{ color: "error.main" }}
+              onClick={() => {
+                if (menuPass) {
+                  void removePass(menuPass);
+                }
+              }}
+            >
+              <DeleteOutlineRoundedIcon
+                fontSize="small"
+                sx={{ mr: 1.5 }}
+              />
+              Usuń karnet
+            </MenuItem>
+          </>
+        )}
+      </Menu>
+
       <Dialog
-        open={dialogOpen}
-        onClose={closeDialog}
+        open={formOpen}
+        onClose={() => !saving && setFormOpen(false)}
         fullWidth
-        maxWidth="sm"
+        maxWidth="md"
       >
         <DialogTitle>
-          {editingPassId !== null ? "✏️ Edytuj karnet" : "🎫 Nowy karnet"}
+          {editingPass ? "Edytuj karnet" : "Nowy karnet"}
         </DialogTitle>
 
         <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            {error && <Alert severity="error">{error}</Alert>}
-
+          <Box
+            sx={{
+              mt: 1,
+              display: "grid",
+              gridTemplateColumns: {
+                xs: "1fr",
+                md: "repeat(2, minmax(0, 1fr))",
+              },
+              gap: 2,
+            }}
+          >
             <TextField
               select
-              required
               label="Klient"
               value={form.client_id}
               onChange={(event) =>
-                setForm({
-                  ...form,
+                setForm((current) => ({
+                  ...current,
                   client_id: event.target.value,
-                })
+                }))
               }
+              required
             >
-              <MenuItem value="">-- wybierz klienta --</MenuItem>
-
+              <MenuItem value="">
+                Wybierz klienta
+              </MenuItem>
               {clients.map((client) => (
-                <MenuItem key={client.id} value={client.id}>
+                <MenuItem
+                  key={client.id}
+                  value={client.id}
+                >
                   {client.first_name} {client.last_name}
                 </MenuItem>
               ))}
             </TextField>
 
             <TextField
-              required
               label="Nazwa karnetu"
               value={form.name}
               onChange={(event) =>
-                setForm({
-                  ...form,
+                setForm((current) => ({
+                  ...current,
                   name: event.target.value,
-                })
+                }))
               }
+              required
             />
 
             <TextField
-              required
               type="number"
-              label="Liczba wszystkich wejść"
+              label="Wszystkie wejścia"
               value={form.total_entries}
               onChange={(event) =>
-                setForm({
-                  ...form,
+                setForm((current) => ({
+                  ...current,
                   total_entries: event.target.value,
-                })
+                }))
               }
+              inputProps={{ min: 1 }}
+              required
             />
 
             <TextField
-              required
               type="number"
-              label="Pozostała liczba wejść"
+              label="Pozostałe wejścia"
               value={form.remaining_entries}
               onChange={(event) =>
-                setForm({
-                  ...form,
+                setForm((current) => ({
+                  ...current,
                   remaining_entries: event.target.value,
-                })
+                }))
               }
+              inputProps={{ min: 0 }}
+              required
             />
 
             <TextField
-              required
               type="date"
               label="Ważny od"
               value={form.valid_from}
-              InputLabelProps={{ shrink: true }}
               onChange={(event) =>
-                setForm({
-                  ...form,
+                setForm((current) => ({
+                  ...current,
                   valid_from: event.target.value,
-                })
+                }))
               }
+              InputLabelProps={{ shrink: true }}
+              required
             />
 
             <TextField
-              required
               type="date"
               label="Ważny do"
               value={form.valid_until}
-              InputLabelProps={{ shrink: true }}
               onChange={(event) =>
-                setForm({
-                  ...form,
+                setForm((current) => ({
+                  ...current,
                   valid_until: event.target.value,
-                })
+                }))
               }
+              InputLabelProps={{ shrink: true }}
+              required
             />
 
             <TextField
@@ -529,130 +954,153 @@ async function openHistory(passItem: ClientPass) {
               label="Status"
               value={form.active}
               onChange={(event) =>
-                setForm({
-                  ...form,
+                setForm((current) => ({
+                  ...current,
                   active: event.target.value,
-                })
+                }))
               }
             >
               <MenuItem value="true">Aktywny</MenuItem>
-              <MenuItem value="false">Nieaktywny</MenuItem>
+              <MenuItem value="false">
+                Nieaktywny
+              </MenuItem>
             </TextField>
-          </Stack>
+          </Box>
         </DialogContent>
 
-        <DialogActions>
-          <Button onClick={closeDialog}>Anuluj</Button>
-
-          <Button variant="contained" onClick={handleSave}>
-            {editingPassId !== null
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button
+            onClick={() => setFormOpen(false)}
+            disabled={saving}
+          >
+            Anuluj
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => void savePass()}
+            disabled={saving}
+            startIcon={
+              saving ? (
+                <CircularProgress
+                  size={18}
+                  color="inherit"
+                />
+              ) : (
+                <ConfirmationNumberRoundedIcon />
+              )
+            }
+          >
+            {editingPass
               ? "Zapisz zmiany"
               : "Dodaj karnet"}
           </Button>
         </DialogActions>
       </Dialog>
 
-            <Dialog
+      <Dialog
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
         fullWidth
         maxWidth="sm"
       >
         <DialogTitle>
-          📜 Historia karnetu — {historyPassName}
+          Historia karnetu — {historyPassName}
         </DialogTitle>
 
         <DialogContent>
           {historyLoading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+            <Box
+              sx={{
+                py: 5,
+                display: "grid",
+                placeItems: "center",
+              }}
+            >
               <CircularProgress />
             </Box>
           ) : history.length === 0 ? (
-            <Typography color="text.secondary">
+            <Typography
+              color="text.secondary"
+              sx={{ py: 3 }}
+            >
               Brak operacji w historii tego karnetu.
             </Typography>
           ) : (
-            <Stack spacing={2} sx={{ mt: 1 }}>
-             {history.map((item) => (
-  <Box
-    key={item.id}
-    sx={{
-      border: "1px solid #e5e7eb",
-      borderRadius: 2,
-      p: 2,
-    }}
-  >
-    <Typography fontWeight={700}>
-      {item.operation === "DEDUCT"
-        ? "➖ Odliczono wejście"
-        : "➕ Zwrócono wejście"}
-    </Typography>
+            <Stack spacing={1.5}>
+              {history.map((item) => (
+                <Paper
+                  key={item.id}
+                  elevation={0}
+                  sx={{
+                    p: 2,
+                    border: "1px solid",
+                    borderColor: "divider",
+                    borderRadius: 3,
+                  }}
+                >
+                  <Typography fontWeight={800}>
+                    {item.operation === "DEDUCT"
+                      ? "Odliczono wejście"
+                      : "Zwrócono wejście"}
+                  </Typography>
 
-    {item.ride_date ? (
-      <>
-        <Typography
-          variant="body2"
-          fontWeight={700}
-          sx={{ mt: 1 }}
-        >
-          📅 {new Date(`${item.ride_date}T00:00:00`).toLocaleDateString("pl-PL")}
-{item.ride_start_time
-  ? `, ${item.ride_start_time}`
-  : ""}
-        </Typography>
+                  {item.ride_date && (
+                    <Typography
+                      variant="body2"
+                      sx={{ mt: 0.75 }}
+                    >
+                      Jazda:{" "}
+                      {new Date(
+                        `${item.ride_date}T00:00:00`,
+                      ).toLocaleDateString("pl-PL")}
+                      {item.ride_start_time
+                        ? `, ${item.ride_start_time}`
+                        : ""}
+                    </Typography>
+                  )}
 
-        {item.client_name && (
-          <Typography variant="body2">
-            👤 {item.client_name}
-          </Typography>
-        )}
+                  {(item.horse_name ||
+                    item.instructor_name) && (
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                    >
+                      {item.horse_name
+                        ? `Koń: ${item.horse_name}`
+                        : ""}
+                      {item.horse_name &&
+                      item.instructor_name
+                        ? " · "
+                        : ""}
+                      {item.instructor_name
+                        ? `Instruktor: ${item.instructor_name}`
+                        : ""}
+                    </Typography>
+                  )}
 
-        {item.horse_name && (
-          <Typography variant="body2">
-            🐴 {item.horse_name}
-          </Typography>
-        )}
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: "block", mt: 1 }}
+                  >
+                    Operacja:{" "}
+                    {new Date(
+                      item.created_at.endsWith("Z")
+                        ? item.created_at
+                        : `${item.created_at}Z`,
+                    ).toLocaleString("pl-PL")}
+                  </Typography>
 
-        {item.instructor_name && (
-          <Typography variant="body2">
-            👨‍🏫 {item.instructor_name}
-          </Typography>
-        )}
-      </>
-    ) : item.ride_id ? (
-      <Typography variant="body2" sx={{ mt: 1 }}>
-        Jazda #{item.ride_id}
-      </Typography>
-    ) : (
-      <Typography
-        variant="body2"
-        color="text.secondary"
-        sx={{ mt: 1 }}
-      >
-        🗑️ Jazda została usunięta
-      </Typography>
-    )}
-
-    <Typography
-      variant="body2"
-      color="text.secondary"
-      sx={{ mt: 1 }}
-    >
-      🕒 Operacja:{" "}
-      {new Date(
-        item.created_at.endsWith("Z")
-          ? item.created_at
-          : `${item.created_at}Z`
-      ).toLocaleString("pl-PL")}
-    </Typography>
-
-    {item.note && (
-      <Typography sx={{ mt: 1 }}>
-        {item.note}
-      </Typography>
-    )}
-  </Box>
-))}
+                  {item.note && (
+                    <Typography
+                      variant="body2"
+                      sx={{ mt: 1 }}
+                    >
+                      {item.note}
+                    </Typography>
+                  )}
+                </Paper>
+              ))}
             </Stack>
           )}
         </DialogContent>
@@ -665,16 +1113,30 @@ async function openHistory(passItem: ClientPass) {
       </Dialog>
 
       <Snackbar
-        open={Boolean(successMessage)}
-        autoHideDuration={3000}
-        onClose={() => setSuccessMessage("")}
+        open={message.open}
+        autoHideDuration={4000}
+        onClose={() =>
+          setMessage((current) => ({
+            ...current,
+            open: false,
+          }))
+        }
+        anchorOrigin={{
+          vertical: "bottom",
+          horizontal: "right",
+        }}
       >
         <Alert
-          severity="success"
+          severity={message.severity}
           variant="filled"
-          onClose={() => setSuccessMessage("")}
+          onClose={() =>
+            setMessage((current) => ({
+              ...current,
+              open: false,
+            }))
+          }
         >
-          {successMessage}
+          {message.text}
         </Alert>
       </Snackbar>
     </Box>
