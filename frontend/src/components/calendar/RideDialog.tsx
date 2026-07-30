@@ -130,8 +130,11 @@ if (rideId === null) {
       try {
         setLoadingData(true);
 
-        const ride = await getRide(rideId);
+if (rideId === null) {
+  return;
+}
 
+const ride = await getRide(rideId);
     setForm({
   client_id: String(ride.client_id),
   horse_id: String(ride.horse_id),

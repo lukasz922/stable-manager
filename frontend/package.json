@@ -10,19 +10,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
+    "@emotion/react": "11.14.0",
+    "@emotion/styled": "11.14.0",
     "@fontsource/roboto": "^5.2.10",
     "@fullcalendar/daygrid": "^6.1.21",
     "@fullcalendar/interaction": "^6.1.21",
     "@fullcalendar/react": "^6.1.21",
     "@fullcalendar/timegrid": "^6.1.21",
-    "@mui/icons-material": "^9.2.0",
-    "@mui/material": "^9.2.0",
-    "@mui/x-data-grid": "^9.10.1",
+    "@mui/icons-material": "6.4.11",
+    "@mui/material": "6.4.11",
+    "@mui/x-data-grid": "7.27.3",
     "axios": "^1.18.1",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "react-router-dom": "^7.18.1"
   },
   "devDependencies": {
