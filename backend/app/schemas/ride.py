@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict
 
 class RideBase(BaseModel):
     client_id: int
-    horse_id: int
+    horse_id: int | None = None
     instructor_id: int
     pass_id: int | None = None
 

@@ -191,7 +191,7 @@ export function DashboardPage() {
     {
       title: "Klienci",
       value: stats.clients_count,
-      accent: "#5b21b6",
+      accent: "#2563eb",
       icon: <GroupsRoundedIcon />,
     },
     {
@@ -203,13 +203,13 @@ export function DashboardPage() {
     {
       title: "Jazdy dzisiaj",
       value: stats.rides_today,
-      accent: "#c2410c",
+      accent: "#2563eb",
       icon: <CalendarMonthRoundedIcon />,
     },
     {
       title: "Klient obecny",
       value: stats.checked_in_today,
-      accent: "#a21caf",
+      accent: "#f59e0b",
       icon: <LoginRoundedIcon />,
     },
     {
@@ -221,21 +221,59 @@ export function DashboardPage() {
     {
       title: "Zaplanowane",
       value: stats.planned_today,
-      accent: "#0369a1",
+      accent: "#2563eb",
       icon: <ScheduleRoundedIcon />,
     },
   ];
 
   return (
     <>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" fontWeight={800}>
-          Dashboard
-        </Typography>
+      <Box
+        sx={{
+          mb: 3,
+          p: { xs: 2.5, md: 3 },
+          borderRadius: 3.5,
+          border: "1px solid",
+          borderColor: "rgba(148, 163, 184, 0.20)",
+          bgcolor: "rgba(255,255,255,0.96)",
+          boxShadow: "0 12px 34px rgba(15, 23, 42, 0.05)",
+          display: "flex",
+          alignItems: { xs: "flex-start", sm: "center" },
+          justifyContent: "space-between",
+          gap: 2,
+          flexDirection: { xs: "column", sm: "row" },
+        }}
+      >
+        <Box>
+          <Typography variant="h4" fontWeight={900}>
+            Dashboard
+          </Typography>
 
-        <Typography color="text.secondary" sx={{ mt: 0.75 }}>
-          Podsumowanie pracy stajni na dziś.
-        </Typography>
+          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+            Podsumowanie pracy stajni na dziś.
+          </Typography>
+        </Box>
+
+        <Box
+          sx={{
+            px: 1.75,
+            py: 1,
+            borderRadius: 2.5,
+            bgcolor: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            color: "#0f4fd8",
+            fontWeight: 800,
+            fontSize: 14,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {new Date().toLocaleDateString("pl-PL", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          })}
+        </Box>
       </Box>
 
       <Box
@@ -291,9 +329,10 @@ export function DashboardPage() {
               sx={{
                 p: 2,
                 borderRadius: 3,
-                bgcolor: "rgba(255,255,255,0.72)",
+                bgcolor: "#ffffff",
                 border: "1px solid",
-                borderColor: "divider",
+                borderColor: "rgba(148, 163, 184, 0.24)",
+                boxShadow: "0 8px 20px rgba(15, 23, 42, 0.04)",
               }}
             >
               <Typography
@@ -323,6 +362,8 @@ export function DashboardPage() {
           border: "1px solid",
           borderColor: "divider",
           borderRadius: 4,
+          overflow: "hidden",
+          boxShadow: "0 16px 42px rgba(15, 23, 42, 0.06)",
         }}
       >
         <CardContent sx={{ p: 0 }}>
@@ -361,7 +402,12 @@ export function DashboardPage() {
                     key={ride.id}
                     sx={{
                       px: 3,
-                      py: 2,
+                      py: 2.25,
+                      transition: "background-color 160ms ease, transform 160ms ease",
+                      "&:hover": {
+                        bgcolor: "rgba(239, 246, 255, 0.72)",
+                        transform: "translateX(2px)",
+                      },
                       display: "grid",
                       gridTemplateColumns: {
                         xs: "1fr",
@@ -396,6 +442,10 @@ export function DashboardPage() {
                           height: 38,
                           fontSize: 15,
                           fontWeight: 800,
+                          color: "#fff",
+                          background:
+                            "linear-gradient(135deg, #0f4fd8 0%, #2563eb 100%)",
+                          boxShadow: "0 8px 18px rgba(37, 99, 235, 0.20)",
                         }}
                       >
                         {ride.client

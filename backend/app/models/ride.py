@@ -13,9 +13,9 @@ class Ride(Base):
         ForeignKey("clients.id"),
         nullable=False,
     )
-    horse_id: Mapped[int] = mapped_column(
-        ForeignKey("horses.id"),
-        nullable=False,
+    horse_id: Mapped[int | None] = mapped_column(
+        ForeignKey("horses.id", ondelete="SET NULL"),
+        nullable=True,
     )
     instructor_id: Mapped[int] = mapped_column(
         ForeignKey("instructors.id"),

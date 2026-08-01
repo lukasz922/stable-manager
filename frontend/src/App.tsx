@@ -19,6 +19,7 @@ import {
   ListItemText,
   Toolbar,
   Tooltip,
+  SvgIcon,
   Typography,
   useMediaQuery,
   useTheme,
@@ -58,7 +59,7 @@ import { RolesPermissionsPage } from "./pages/RolesPermissionsPage";
 
 import { useAuth } from "./auth/AuthContext";
 
-const drawerWidth = 280;
+const drawerWidth = 276;
 
 type MenuSection =
   | "Główne"
@@ -190,6 +191,21 @@ const sectionOrder: MenuSection[] = [
   "Administracja",
   "Instruktor",
 ];
+
+function HorseshoeIcon() {
+  return (
+    <SvgIcon viewBox="0 0 24 24" sx={{ fontSize: 28 }}>
+      <path
+        d="M6 3v8c0 6 2.7 10 6 10s6-4 6-10V3h-3v8c0 3.8-1.3 6.5-3 6.5S9 14.8 9 11V3H6z"
+        fill="currentColor"
+      />
+      <circle cx="7.5" cy="6" r="0.8" fill="#2563eb" />
+      <circle cx="7.5" cy="10" r="0.8" fill="#2563eb" />
+      <circle cx="16.5" cy="6" r="0.8" fill="#2563eb" />
+      <circle cx="16.5" cy="10" r="0.8" fill="#2563eb" />
+    </SvgIcon>
+  );
+}
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -325,7 +341,7 @@ function App() {
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        bgcolor: "#fff",
+        bgcolor: "#ffffff",
       }}
     >
       <Toolbar
@@ -345,11 +361,11 @@ function App() {
             color: "primary.main",
             bgcolor: "primary.main",
             background:
-              "linear-gradient(135deg, rgba(37,99,235,1), rgba(124,58,237,1))",
-            boxShadow: "0 10px 24px rgba(79, 70, 229, 0.24)",
+              "linear-gradient(135deg, #0f4fd8 0%, #2563eb 58%, #60a5fa 100%)",
+            boxShadow: "0 12px 28px rgba(37, 99, 235, 0.24)",
           }}
         >
-          <PetsRoundedIcon sx={{ color: "#fff" }} />
+          <HorseshoeIcon />
         </Box>
 
         <Box>
@@ -409,7 +425,7 @@ function App() {
                     to={item.path}
                     onClick={() => setMobileMenuOpen(false)}
                     sx={{
-                      minHeight: 46,
+                      minHeight: 44,
                       borderRadius: 3,
                       mb: 0.5,
                       px: 1.5,
@@ -426,8 +442,8 @@ function App() {
                         transform: "translateX(2px)",
                       },
                       "&.active": {
-                        color: "primary.main",
-                        bgcolor: "rgba(37, 99, 235, 0.09)",
+                        color: "#0f4fd8",
+                        bgcolor: "rgba(37, 99, 235, 0.10)",
                         fontWeight: 800,
                         "&::before": {
                           content: '""',
@@ -437,7 +453,7 @@ function App() {
                           bottom: 8,
                           width: 4,
                           borderRadius: "0 8px 8px 0",
-                          bgcolor: "primary.main",
+                          bgcolor: "#2563eb",
                         },
                       },
                     }}
@@ -466,7 +482,7 @@ function App() {
           sx={{
             p: 1.5,
             borderRadius: 3,
-            bgcolor: "grey.50",
+            bgcolor: "rgba(239, 246, 255, 0.84)",
             border: "1px solid",
             borderColor: "divider",
             display: "flex",
@@ -521,7 +537,8 @@ function App() {
       sx={{
         display: "flex",
         minHeight: "100vh",
-        bgcolor: "#f5f7fb",
+        background:
+          "radial-gradient(circle at top right, rgba(191, 219, 254, 0.38), transparent 30%), #f8fafc",
       }}
     >
       <AppBar
@@ -530,11 +547,11 @@ function App() {
         sx={{
           zIndex: (muiTheme) =>
             muiTheme.zIndex.drawer + 1,
-          bgcolor: "rgba(255,255,255,0.92)",
+          bgcolor: "rgba(255,255,255,0.88)",
           color: "text.primary",
           borderBottom: "1px solid",
-          borderColor: "divider",
-          backdropFilter: "blur(14px)",
+          borderColor: "rgba(148, 163, 184, 0.22)",
+          backdropFilter: "blur(18px)",
           ml: isDesktop ? `${drawerWidth}px` : 0,
           width: isDesktop
             ? `calc(100% - ${drawerWidth}px)`
@@ -607,7 +624,8 @@ function App() {
               width: drawerWidth,
               boxSizing: "border-box",
               borderRight: "1px solid",
-              borderColor: "divider",
+              borderColor: "rgba(148, 163, 184, 0.22)",
+              boxShadow: "10px 0 34px rgba(15, 23, 42, 0.035)",
             },
           }}
         >
@@ -629,7 +647,7 @@ function App() {
         <Box
           sx={{
             width: "100%",
-            maxWidth: 1800,
+            maxWidth: 1720,
             mx: "auto",
             pt: { xs: 2, sm: 3 },
           }}

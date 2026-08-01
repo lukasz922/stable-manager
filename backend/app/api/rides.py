@@ -221,6 +221,15 @@ def check_ride_conflicts(
         minutes=payload.duration_minutes
     )
 
+    conflict_conditions = [
+        Ride.instructor_id == payload.instructor_id,
+    ]
+
+    if payload.horse_id is not None:
+        conflict_conditions.append(
+            Ride.horse_id == payload.horse_id
+        )
+
     query = (
         db.query(Ride)
         .options(
@@ -229,10 +238,7 @@ def check_ride_conflicts(
         )
         .filter(
             Ride.status != "cancelled",
-            or_(
-                Ride.horse_id == payload.horse_id,
-                Ride.instructor_id == payload.instructor_id,
-            ),
+            or_(*conflict_conditions),
         )
     )
 
@@ -253,7 +259,10 @@ def check_ride_conflicts(
         if not overlaps:
             continue
 
-        if existing_ride.horse_id == payload.horse_id:
+        if (
+            payload.horse_id is not None
+            and existing_ride.horse_id == payload.horse_id
+        ):
             horse_name = (
                 existing_ride.horse.name
                 if existing_ride.horse

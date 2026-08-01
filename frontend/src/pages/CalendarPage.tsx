@@ -30,17 +30,17 @@ function toLocalDateTime(date: Date): string {
 }
 
 const statCardSx = {
-  border: "1px solid #e7eaf0",
-  borderRadius: 3,
+  border: "1px solid rgba(148, 163, 184, 0.22)",
+  borderRadius: 3.5,
   p: 2.25,
-  backgroundColor: "#ffffff",
+  backgroundColor: "rgba(255,255,255,0.92)",
   cursor: "pointer",
   transition: "transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease",
-  boxShadow: "0 8px 24px rgba(15, 23, 42, 0.04)",
+  boxShadow: "0 10px 28px rgba(15, 23, 42, 0.05)",
   "&:hover": {
-    transform: "translateY(-2px)",
-    boxShadow: "0 14px 30px rgba(15, 23, 42, 0.08)",
-    borderColor: "#d8dde8",
+    transform: "translateY(-3px)",
+    boxShadow: "0 18px 36px rgba(37, 99, 235, 0.10)",
+    borderColor: "rgba(37, 99, 235, 0.35)",
   },
 } as const;
 
@@ -182,7 +182,13 @@ const events = filteredRides.map((ride) => ({
           justifyContent: "space-between",
           gap: 2,
           mb: 3,
+          p: { xs: 2.5, md: 3 },
+          borderRadius: 4,
           flexDirection: { xs: "column", md: "row" },
+          background:
+            "linear-gradient(135deg, #0f4fd8 0%, #2563eb 58%, #60a5fa 100%)",
+          color: "#fff",
+          boxShadow: "0 18px 46px rgba(37, 99, 235, 0.22)",
         }}
       >
         <Box>
@@ -190,7 +196,7 @@ const events = filteredRides.map((ride) => ({
             Kalendarz jazd
           </Typography>
 
-          <Typography color="text.secondary">
+          <Typography sx={{ color: "rgba(255,255,255,0.82)" }}>
             Zarządzaj planem jazd, dostępnością koni i instruktorów.
           </Typography>
         </Box>
@@ -209,7 +215,12 @@ const events = filteredRides.map((ride) => ({
               py: 1.15,
               textTransform: "none",
               fontWeight: 700,
-              boxShadow: "0 8px 20px rgba(25, 118, 210, 0.22)",
+              bgcolor: "#fff",
+              color: "#0f4fd8",
+              boxShadow: "0 10px 24px rgba(76, 5, 25, 0.18)",
+              "&:hover": {
+                bgcolor: "#eff6ff",
+              },
             }}
           >
             + Dodaj jazdę
@@ -308,10 +319,10 @@ sx={{
   sx={{
     mb: 3,
     p: 2,
-    border: "1px solid #e7eaf0",
-    borderRadius: 3,
-    backgroundColor: "#ffffff",
-    boxShadow: "0 8px 24px rgba(15, 23, 42, 0.04)",
+    border: "1px solid rgba(148, 163, 184, 0.22)",
+    borderRadius: 3.5,
+    backgroundColor: "rgba(255,255,255,0.94)",
+    boxShadow: "0 12px 30px rgba(15, 23, 42, 0.05)",
   }}
 >
 <TextField
@@ -383,11 +394,11 @@ sx={{
       <Box
         className="stable-calendar-shell"
         sx={{
-          background: "#fff",
-          border: "1px solid #e7eaf0",
-          borderRadius: 3,
-          p: { xs: 1, md: 2 },
-          boxShadow: "0 14px 34px rgba(15, 23, 42, 0.06)",
+          background: "rgba(255,255,255,0.96)",
+          border: "1px solid rgba(148, 163, 184, 0.22)",
+          borderRadius: 4,
+          p: { xs: 1, md: 2.25 },
+          boxShadow: "0 18px 44px rgba(15, 23, 42, 0.07)",
           overflow: "hidden",
         }}
       >

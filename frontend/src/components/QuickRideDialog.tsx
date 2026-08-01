@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -55,6 +55,7 @@ export function QuickRideDialog({
   const [loading, setLoading] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [error, setError] = useState("");
+  const autoStartedRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -69,10 +70,22 @@ export function QuickRideDialog({
           getInstructors(),
         ]);
 
-        setHorses(horsesData);
-        setInstructors(
-          instructorsData.filter((instructor) => instructor.status === "active"),
+        const activeInstructors = instructorsData.filter(
+          (instructor) => instructor.status === "active",
         );
+
+        setHorses(horsesData);
+        setInstructors(activeInstructors);
+
+        if (horsesData.length > 0) {
+          setHorseId((current) => current || String(horsesData[0].id));
+        }
+
+        if (activeInstructors.length > 0) {
+          setInstructorId(
+            (current) => current || String(activeInstructors[0].id),
+          );
+        }
       } catch (err) {
         setError(
           err instanceof Error
@@ -94,13 +107,46 @@ export function QuickRideDialog({
       setInstructorId("");
       setDurationMinutes(60);
       setError("");
+      autoStartedRef.current = false;
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open || passes.length === 0) {
+      return;
+    }
+
+    setPassId((current) => current || String(passes[0].id));
+  }, [open, passes]);
 
   const selectedPass = useMemo(
     () => passes.find((item) => item.id === Number(passId)),
     [passes, passId],
   );
+
+  useEffect(() => {
+    if (
+      !open ||
+      autoStartedRef.current ||
+      loading ||
+      loadingOptions ||
+      !passId ||
+      !horseId ||
+      !instructorId
+    ) {
+      return;
+    }
+
+    autoStartedRef.current = true;
+    void handleSubmit();
+  }, [
+    open,
+    loading,
+    loadingOptions,
+    passId,
+    horseId,
+    instructorId,
+  ]);
 
   async function handleSubmit() {
     if (!passId || !horseId || !instructorId) {
@@ -143,7 +189,7 @@ export function QuickRideDialog({
       PaperProps={{ sx: { borderRadius: 4 } }}
     >
       <DialogTitle sx={{ fontWeight: 900 }}>
-        Szybka jazda
+        Szybka jazda — gotowa do rozpoczęcia
       </DialogTitle>
 
       <DialogContent>
@@ -249,6 +295,16 @@ export function QuickRideDialog({
               </FormControl>
             </Box>
           )}
+
+          {!loadingOptions &&
+            passes.length > 0 &&
+            horseId &&
+            instructorId && (
+              <Alert severity="success">
+                Dane zostały wybrane automatycznie. Jazda zostanie uruchomiona
+                automatycznie i pojawi się ze statusem „Klient obecny”.
+              </Alert>
+            )}
 
           {selectedPass && (
             <Alert severity="info">

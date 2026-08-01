@@ -3,7 +3,7 @@ import { api } from "./client";
 export type Ride = {
   id: number;
   client_id: number;
-  horse_id: number;
+  horse_id: number | null;
   instructor_id: number;
   client_name?: string | null;
   horse_name?: string | null;
@@ -17,7 +17,7 @@ export type Ride = {
 
 export type RideCreate = {
   client_id: number;
-  horse_id: number;
+  horse_id: number | null;
   instructor_id: number;
   start_time: string;
   duration_minutes: number;
